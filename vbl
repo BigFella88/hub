@@ -1,90 +1,52 @@
-local service = 3118; -- Set your PlatoBoost ID  
-local secret = "2866565e-a6dd-4aa1-b5db-d2e4e1ee9801"; -- Set your PlatoBoost API key  
-local useNonce = false; -- Disable nonce to prevent expiration issues  
-local onMessage = function(message)  
-    game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", { Text = message; })  
-end;
+local service = 3118 -- Your Platoboost service ID
+local secret = "2866565e-a6dd-4aa1-b5db-d2e4e1ee9801" -- Your Platoboost API key
 
-repeat task.wait(1) until game:IsLoaded() or game.Players.LocalPlayer;
-
-local requestSending = false;
-local fSetClipboard, fRequest, fToString, fStringSub, fGetHwid = setclipboard or toclipboard, request or http_request, tostring, string.sub, gethwid or function() return game:GetService("Players").LocalPlayer.UserId end
-local cachedKey = nil;
 local HttpService = game:GetService("HttpService")
+local StarterGui = game:GetService("StarterGui")
 
-function lEncode(data)
-    return HttpService:JSONEncode(data)
-end
-function lDecode(data)
-    return HttpService:JSONDecode(data)
-end
-function lDigest(input)
-    local inputStr = tostring(input)
-    local hash = {}
-    for i = 1, #inputStr do
-        table.insert(hash, string.byte(inputStr, i))
-    end
-    local hashHex = ""
-    for _, byte in ipairs(hash) do
-        hashHex = hashHex .. string.format("%02x", byte)
-    end
-    return hashHex
+local function onMessage(message)
+    StarterGui:SetCore("ChatMakeSystemMessage", { Text = message })
 end
 
-local host = "https://api.platoboost.com";
-local hostResponse = fRequest({
-    Url = host .. "/public/connectivity",
-    Method = "GET"
-});
-if hostResponse.StatusCode ~= 200 or hostResponse.StatusCode ~= 429 then
-    host = "https://api.platoboost.net";
-end
+local host = "https://api.platoboost.com"
 
--- Function to get key link (no time restriction)
-function getKeyLink()
-    local response = fRequest({
+-- Function to get a new key **after** Linkvertise
+local function getFreshKey()
+    local response = request({
         Url = host .. "/public/start",
         Method = "POST",
-        Body = lEncode({
+        Body = HttpService:JSONEncode({
             service = service,
-            identifier = lDigest(fGetHwid())
+            identifier = game:GetService("Players").LocalPlayer.UserId
         }),
         Headers = {
             ["Content-Type"] = "application/json"
         }
-    });
+    })
 
     if response.StatusCode == 200 then
-        local decoded = lDecode(response.Body)
-        if decoded.success == true then
-            cachedKey = decoded.data.url; -- Store key link permanently
-            return true, cachedKey
-        else
-            onMessage(decoded.message)
-            return false, decoded.message
+        local data = HttpService:JSONDecode(response.Body)
+        if data.success then
+            return data.data.url -- Return the fresh key URL
         end
-    elseif response.StatusCode == 429 then
-        onMessage("You are being rate limited, please wait 20 seconds and try again.")
-        return false, "Rate Limited"
+    end
+
+    return nil
+end
+
+-- Automatically generate and copy a fresh key link
+local function copyNewKey()
+    local freshKey = getFreshKey()
+    if freshKey then
+        setclipboard(freshKey)
+        onMessage("New key link copied! Paste it in your browser.")
     else
-        onMessage("Failed to get key link.")
-        return false, "Error"
+        onMessage("Failed to generate a new key. Try again later.")
     end
 end
 
--- Function to copy key link (users can redeem anytime)
-function copyLink()
-    if cachedKey then
-        fSetClipboard(cachedKey)
-        onMessage("Key copied! Use it anytime.")
-    else
-        local success, link = getKeyLink()
-        if success then
-            fSetClipboard(link)
-            onMessage("Key copied! Use it anytime.")
-        end
-    end
-end
+-- Run automatically when script executes
+copyNewKey()
 
 -- Function to redeem key (No nonce, so no expiration)
 function redeemKey(key)
