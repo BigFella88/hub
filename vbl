@@ -1,0 +1,1634 @@
+-- Place this in a LocalScript under StarterPlayerScripts
+-- This script is for Volleyball Legends and includes a key system and main UI with features like a hitbox extender.
+
+-- == PLATOBOOST KEY SYSTEM ==
+local service = 3118
+local secret = "2866565e-a6dd-4aa1-b5db-d2e4e1ee9801"
+local useNonce = false -- Set to false as it worked for you
+
+local onMessage = function(message)
+    print("Platoboost Message: " .. message)
+    game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", { Text = message })
+end
+
+repeat task.wait(1) until game:IsLoaded()
+
+local requestSending = false
+local fSetClipboard, fRequest, fStringChar, fToString, fStringSub, fOsTime, fMathRandom, fMathFloor, fGetHwid = setclipboard or toclipboard, request or http_request or syn_request, string.char, tostring, string.sub, os.time, math.random, math.floor, gethwid or function() return game:GetService("Players").LocalPlayer.UserId end
+local cachedLink, cachedTime = "", 0
+local HttpService = game:GetService("HttpService")
+
+function lEncode(data)
+    return HttpService:JSONEncode(data)
+end
+
+function lDecode(data)
+    return HttpService:JSONDecode(data)
+end
+
+local function lDigest(input)
+    local inputStr = tostring(input)
+    local hash = {}
+    for i = 1, #inputStr do
+        table.insert(hash, string.byte(inputStr, i))
+    end
+    local hashHex = ""
+    for _, byte in ipairs(hash) do
+        hashHex = hashHex .. string.format("%02x", byte)
+    end
+    return hashHex
+end
+
+local host = "https://api.platoboost.com"
+local hostResponse = fRequest({
+    Url = host .. "/public/connectivity",
+    Method = "GET"
+})
+if hostResponse.StatusCode ~= 200 and hostResponse.StatusCode ~= 429 then
+    host = "https://api.platoboost.net"
+end
+
+function cacheLink()
+    if cachedTime + (10*60) < fOsTime() then
+        print("Fetching new link from Platoboost...")
+        local response = fRequest({
+            Url = host .. "/public/start",
+            Method = "POST",
+            Body = lEncode({
+                service = service,
+                identifier = lDigest(fGetHwid())
+            }),
+            Headers = {
+                ["Content-Type"] = "application/json"
+            }
+        })
+
+        print("API Response Status: " .. tostring(response.StatusCode))
+        print("API Response Body: " .. tostring(response.Body))
+
+        if response.StatusCode == 200 then
+            local decoded = lDecode(response.Body)
+            print("Decoded Response: " .. HttpService:JSONEncode(decoded))
+            if decoded.success == true then
+                cachedLink = decoded.data.url
+                cachedTime = fOsTime()
+                print("Cached Link: " .. cachedLink)
+                return true, cachedLink
+            else
+                onMessage(decoded.message)
+                print("API Error Message: " .. decoded.message)
+                return false, decoded.message
+            end
+        elseif response.StatusCode == 429 then
+            local msg = "you are being rate limited, please wait 20 seconds and try again."
+            onMessage(msg)
+            print("Rate Limited (429)")
+            return false, msg
+        end
+
+        local msg = "Failed to cache link."
+        onMessage(msg)
+        print("Failed to cache link - Status Code: " .. tostring(response.StatusCode))
+        return false, msg
+    else
+        print("Using cached link: " .. cachedLink)
+        return true, cachedLink
+    end
+end
+
+cacheLink()
+print("Your HWID: " .. lDigest(fGetHwid())) -- Debug HWID
+
+local generateNonce = function()
+    local str = ""
+    for _ = 1, 16 do
+        str = str .. fStringChar(fMathFloor(fMathRandom() * (122 - 97 + 1)) + 97)
+    end
+    return str
+end
+
+for _ = 1, 5 do
+    local oNonce = generateNonce()
+    task.wait(0.2)
+    if generateNonce() == oNonce then
+        local msg = "platoboost nonce error."
+        onMessage(msg)
+        error(msg)
+    end
+end
+
+local copyLink = function()
+    local success, link = cacheLink()
+    if success then
+        fSetClipboard(link)
+    end
+end
+
+local redeemKey = function(key)
+    local nonce = generateNonce()
+    local endpoint = host .. "/public/redeem/" .. fToString(service)
+    local body = {
+        identifier = lDigest(fGetHwid()),
+        key = key
+    }
+    if useNonce then
+        body.nonce = nonce
+    end
+
+    print("Redeeming key: " .. key)
+    print("Redeem endpoint: " .. endpoint)
+    print("Request body: " .. lEncode(body))
+
+    local response = fRequest({
+        Url = endpoint,
+        Method = "POST",
+        Body = lEncode(body),
+        Headers = {
+            ["Content-Type"] = "application/json"
+        }
+    })
+
+    print("Redeem HTTP response status: " .. tostring(response.StatusCode))
+    print("Redeem HTTP response body: " .. tostring(response.Body))
+
+    if response.StatusCode == 200 then
+        local decoded = lDecode(response.Body)
+        print("Redeem Decoded response: " .. HttpService:JSONEncode(decoded))
+        if decoded.success == true then
+            if decoded.data.valid == true then
+                if useNonce then
+                    local expectedHash = lDigest("true" .. "-" .. nonce .. "-" .. secret)
+                    print("Expected hash: " .. expectedHash)
+                    print("Received hash: " .. tostring(decoded.data.hash))
+                    if decoded.data.hash == expectedHash then
+                        print("Redeem successful")
+                        return true
+                    else
+                        onMessage("failed to verify integrity.")
+                        print("Redeem integrity verification failed")
+                        return false
+                    end
+                else
+                    print("Redeem successful (no nonce)")
+                    return true
+                end
+            else
+                onMessage("key is invalid.")
+                print("Redeem key invalid")
+                return false
+            end
+        else
+            if fStringSub(decoded.message, 1, 27) == "unique constraint violation" then
+                onMessage("you already have an active key, please wait for it to expire before redeeming it.")
+                print("Redeem failed: unique constraint violation")
+                return false
+            else
+                onMessage(decoded.message)
+                print("Redeem failed: " .. decoded.message)
+                return false
+            end
+        end
+    elseif response.StatusCode == 429 then
+        onMessage("you are being rate limited, please wait 20 seconds and try again.")
+        print("Redeem rate limited (429)")
+        return false
+    else
+        onMessage("server returned an invalid status code, please try again later.")
+        print("Redeem invalid status code: " .. tostring(response.StatusCode))
+        return false
+    end
+end
+
+local verifyKey = function(key)
+    print("Starting key verification for key: " .. key)
+    
+    -- Trim any whitespace from the key for safety
+    local trimmedKey = string.gsub(key, "%s+", "") -- Remove all whitespace
+    print("Trimmed key: " .. trimmedKey)
+
+    if requestSending == true then
+        onMessage("a request is already being sent, please slow down.")
+        print("Request already in progress")
+        return false
+    else
+        requestSending = true
+    end
+
+    local nonce = generateNonce()
+    local endpoint = host .. "/public/whitelist/" .. fToString(service) .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. trimmedKey
+    if useNonce then
+        endpoint = endpoint .. "&nonce=" .. nonce
+    end
+    print("Verification endpoint: " .. endpoint)
+
+    local success, response = pcall(function()
+        return fRequest({
+            Url = endpoint,
+            Method = "GET",
+        })
+    end)
+
+    requestSending = false
+
+    if not success then
+        print("HTTP request failed: " .. tostring(response))
+        onMessage("Failed to send request to Platoboost: " .. tostring(response))
+        return false
+    end
+
+    print("HTTP response status: " .. tostring(response.StatusCode))
+    print("HTTP response body: " .. tostring(response.Body))
+
+    if response.StatusCode == 200 then
+        local decodedSuccess, decoded = pcall(function()
+            return lDecode(response.Body)
+        end)
+        if not decodedSuccess then
+            print("Failed to decode response: " .. tostring(decoded))
+            onMessage("Failed to decode server response")
+            return false
+        end
+
+        print("Decoded response: " .. HttpService:JSONEncode(decoded))
+        if decoded.success == true then
+            if decoded.data.valid == true then
+                if useNonce then
+                    local expectedHash = lDigest("true" .. "-" .. nonce .. "-" .. secret)
+                    print("Expected hash: " .. expectedHash)
+                    print("Received hash: " .. tostring(decoded.data.hash))
+                    if decoded.data.hash == expectedHash then
+                        print("Key verification successful")
+                        return true
+                    else
+                        onMessage("failed to verify integrity.")
+                        print("Integrity verification failed")
+                        return false
+                    end
+                else
+                    print("Key verification successful (no nonce)")
+                    return true
+                end
+            else
+                print("Key is invalid according to API")
+                local keyPrefix = fStringSub(trimmedKey, 1, 5)
+                if keyPrefix == "KEY_" or keyPrefix == "FREE_" then
+                    print("Key starts with " .. keyPrefix .. ", attempting to redeem")
+                    local redeemSuccess = redeemKey(trimmedKey)
+                    print("Redeem result: " .. tostring(redeemSuccess))
+                    return redeemSuccess
+                else
+                    onMessage("key is invalid - does not start with KEY_ or FREE_")
+                    print("Key does not start with KEY_ or FREE_")
+                    return false
+                end
+            end
+        else
+            onMessage(decoded.message)
+            print("Server returned failure: " .. decoded.message)
+            return false
+        end
+    elseif response.StatusCode == 429 then
+        onMessage("you are being rate limited, please wait 20 seconds and try again.")
+        print("Rate limited (429)")
+        return false
+    else
+        onMessage("server returned an invalid status code, please try again later.")
+        print("Invalid status code: " .. tostring(response.StatusCode))
+        return false
+    end
+end
+
+-- == LOAD THE OBSIDIAN UI LIBRARY ==
+local Library
+local success, result = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/Library.lua"))()
+end)
+
+if not success or not result then
+    warn("Failed to load Obsidian UI Library! Error: " .. tostring(result))
+    return
+end
+Library = result
+print("Obsidian UI Library loaded successfully")
+
+-- == CREATE THE KEY SYSTEM WINDOW ==
+local KeyWindow
+local KeyScreenGui -- To store the ScreenGui instance
+success, KeyWindow = pcall(function()
+    local window = Library:CreateWindow({
+        Title = "Lyez Key System",
+        Footer = "Powered by Platoboost",
+        ToggleKeybind = Enum.KeyCode.RightControl,
+        Center = true,
+        AutoShow = true
+    })
+    -- Find the ScreenGui created by the library
+    for _, gui in pairs(game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"):GetChildren()) do
+        if gui:IsA("ScreenGui") and gui.Name:match("Obsidian") then
+            KeyScreenGui = gui
+            print("Found Key System ScreenGui: " .. gui.Name)
+            break
+        end
+    end
+    return window
+end)
+
+if not success or not KeyWindow then
+    warn("Failed to create key system window! Error: " .. tostring(KeyWindow))
+    return
+end
+print("Key system window created successfully")
+
+-- == CREATE A TAB AND GROUPBOX FOR THE KEY SYSTEM ==
+local KeyTab
+success, KeyTab = pcall(function()
+    return KeyWindow:AddTab("Key System", "key")
+end)
+if not success or not KeyTab then
+    warn("Failed to create key system tab! Error: " .. tostring(KeyTab))
+    return
+end
+print("Key system tab created successfully")
+
+local KeyGroupbox
+success, KeyGroupbox = pcall(function()
+    return KeyTab:AddLeftGroupbox("Enter Key")
+end)
+if not success or not KeyGroupbox then
+    warn("Failed to create key system groupbox! Error: " .. tostring(KeyGroupbox))
+    return
+end
+print("Key system groupbox created successfully")
+
+-- == KEY SYSTEM UI ELEMENTS ==
+-- Textbox for entering the key
+local KeyInput
+success, KeyInput = pcall(function()
+    return KeyGroupbox:AddInput("KeyInput", {
+        Text = "Enter Key",
+        Placeholder = "Paste your key here",
+        Callback = function(Value)
+            print("Key entered: " .. Value)
+        end
+    })
+end)
+if not success or not KeyInput then
+    warn("Failed to create key input! Error: " .. tostring(KeyInput))
+    return
+end
+print("Key input created successfully")
+
+-- "Get Key" button to copy the Platoboost link
+local GetKeyButton
+success, GetKeyButton = pcall(function()
+    return KeyGroupbox:AddButton({
+        Text = "Get Key",
+        Func = function()
+            print("Get Key button clicked")
+            copyLink()
+            Library:Notify("Key link copied to clipboard! Paste it into your browser to get a key.", 5)
+        end,
+        DoubleClick = false
+    })
+end)
+if not success or not GetKeyButton then
+    warn("Failed to create Get Key button! Error: " .. tostring(GetKeyButton))
+    return
+end
+print("Get Key button created successfully")
+
+-- "Check Key" button to validate the entered key
+local CheckKeyButton
+success, CheckKeyButton = pcall(function()
+    return KeyGroupbox:AddButton({
+        Text = "Check Key",
+        Func = function()
+            print("Check Key button clicked")
+            local enteredKey = KeyInput.Value
+            print("Entered key: " .. enteredKey)
+            if enteredKey == "" then
+                Library:Notify("Please enter a key!", 3)
+                print("No key entered")
+                return
+            end
+
+            local success = verifyKey(enteredKey)
+            print("Verification result: " .. tostring(success))
+            if success then
+                Library:Notify("Key validated successfully!", 3)
+                print("Attempting to unload key system UI...")
+
+                -- Unload the key system UI using Library:Unload()
+                local cleanupSuccess, cleanupError = pcall(function()
+                    Library:Unload()
+                    print("Key system UI unloaded using Library:Unload()")
+
+                    -- Clear references to UI elements
+                    KeyWindow = nil
+                    KeyTab = nil
+                    KeyGroupbox = nil
+                    KeyInput = nil
+                    GetKeyButton = nil
+                    CheckKeyButton = nil
+                    KeyScreenGui = nil
+
+                    -- Clear the Library reference to force reinitialization
+                    Library = nil
+
+                    collectgarbage("collect")
+                    print("Key system UI references cleared and garbage collected")
+
+                    -- Verify no Obsidian UI elements remain
+                    local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+                    local foundGui = false
+                    for _, gui in pairs(playerGui:GetChildren()) do
+                        if gui:IsA("ScreenGui") and gui.Name:match("Obsidian") then
+                            foundGui = true
+                            warn("Lingering ScreenGui found after unload: " .. gui.Name .. " (Enabled: " .. tostring(gui.Enabled) .. ")")
+                            for _, child in pairs(gui:GetChildren()) do
+                                print("Child of lingering ScreenGui: " .. child.Name .. " (" .. child.ClassName .. ")")
+                            end
+                        end
+                    end
+                    if not foundGui then
+                        print("No Obsidian ScreenGuis found - unload successful")
+                    else
+                        warn("Unload incomplete - Obsidian ScreenGuis still present")
+                    end
+                end)
+
+                if not cleanupSuccess then
+                    warn("Unload failed: " .. tostring(cleanupError))
+                else
+                    print("Unload completed successfully")
+                end
+
+                -- Wait for 2 seconds before loading main UI
+                print("Waiting for 2 seconds before loading main UI...")
+                task.wait(2)
+
+                -- Proceed to load main UI
+                print("Proceeding to load main UI...")
+                local mainUISuccess, mainUIError = pcall(loadMainUI)
+                if not mainUISuccess then
+                    warn("Failed to load main UI: " .. tostring(mainUIError))
+                else
+                    print("Main UI loaded successfully")
+                end
+            else
+                Library:Notify("Invalid key! Please try again.", 3)
+                print("Key validation failed")
+            end
+        end,
+        DoubleClick = false
+    })
+end)
+if not success or not CheckKeyButton then
+    warn("Failed to create Check Key button! Error: " .. tostring(CheckKeyButton))
+    return
+end
+print("Check Key button created successfully")
+
+-- == FUNCTION TO LOAD THE MAIN UI WITH HITBOX EXTENDER AND FEATURES ==
+function loadMainUI()
+    print("Loading main UI")
+
+    -- Since Library:Unload() was called, we need to reload the library
+    if not Library then
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/Library.lua"))()
+        end)
+
+        if not success or not result then
+            warn("Failed to reload Obsidian UI Library! Error: " .. tostring(result))
+            return
+        end
+        Library = result
+        print("Obsidian UI Library reloaded successfully")
+    end
+
+    -- == CREATE THE UI WINDOW ==
+    local Window
+    local success, Window = pcall(function()
+        return Library:CreateWindow({
+            Title = "Lyez",
+            Footer = "v1.0.0",
+            ToggleKeybind = Enum.KeyCode.RightControl,
+            Center = true,
+            AutoShow = true
+        })
+    end)
+
+    if not success or not Window then
+        warn("Failed to create UI window! Error: " .. tostring(Window))
+        return
+    end
+    print("UI window created successfully")
+
+    -- == CREATE TABS IN THE WINDOW ==
+    local MainTab = Window:AddTab("Main", "home")
+    local StatModifierTab = Window:AddTab("Stat Modifier", "stats")
+    local OtherTab = Window:AddTab("Other", "misc")
+    local UiSettingsTab = Window:AddTab("Ui Settings", "settings")
+
+    -- == CREATE GROUPBOXES FOR MAIN TAB ==
+    local MainGroupbox = MainTab:AddLeftGroupbox("Main")
+    local MovementGroupbox = MainTab:AddRightGroupbox("Movement Settings")
+    local ServeGroupbox = MainTab:AddRightGroupbox("Serve Settings")
+
+    -- == CREATE GROUPBOXES FOR STAT MODIFIER TAB ==
+    local StatsGroupbox = StatModifierTab:AddLeftGroupbox("Stats")
+    local StatMovementGroupbox = StatModifierTab:AddRightGroupbox("Movement")
+
+    -- == CREATE GROUPBOXES FOR OTHER TAB ==
+    local NameChangerGroupbox = OtherTab:AddLeftGroupbox("Name Changer")
+
+    -- == CREATE GROUPBOXES FOR UI SETTINGS TAB ==
+    local UiCustomizationGroupbox = UiSettingsTab:AddLeftGroupbox("UI Customization")
+
+    -- == SERVICES ==
+    local Players = game:GetService("Players")
+    local Workspace = game:GetService("Workspace")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
+    local Debris = game:GetService("Debris")
+
+    local player = Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+    -- == CONFIGURATION VARIABLES ==
+    -- HITBOX EXTENDER CONFIG
+    local hitboxEnabled = false
+    local EXTENDED_RANGE = 10
+    local sphereTransparency = 0.7
+    local sphereColor = Color3.fromRGB(255, 0, 0)
+    local outlineColor = Color3.fromRGB(139, 0, 0)
+    local HIT_COOLDOWN = 1
+    local lastHitTime = 0
+
+    -- AIMING BEAM CONFIG
+    local aimEnabled = false
+    local beamColor = Color3.fromRGB(255, 0, 0)
+    local beamWidth = 2
+    local aimDistance = 20
+
+    -- MID-AIR CONTROL CONFIG
+    local midAirEnabled = false
+    local midAirSpeed = 20
+
+    -- SERVE POWER OVERRIDE CONFIG
+    local serveOverrideEnabled = false
+
+    -- STAT MODIFIER CONFIG
+    local statModifierEnabled = false
+    local multipliers = {
+        Speed = 1.5,
+        SpikePower = 1.5,
+        JumpPower = 1.5,
+        BumpPower = 1.5,
+        DiveSpeed = 1.5,
+        ServePower = 1.5,
+        SetPower = 1.5,
+        BlockPower = 1.5
+    }
+    local baseStats = {
+        WalkSpeed = 16, -- Default Roblox WalkSpeed
+        JumpHeight = 7.2 -- Default Roblox JumpHeight (equivalent to JumpPower of 50)
+    }
+
+    -- == STORAGE FOR HITBOX SPHERES, BEAMS, AND CONNECTIONS ==
+    local sphereReferences = {}
+    local beams = {}
+    local midAirConnections = {}
+    local statConnections = {}
+
+    -- == FIND THE INTERACT REMOTE FUNCTION ==
+    local interactRemote = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.7.0"):WaitForChild("knit"):WaitForChild("Services"):WaitForChild("BallService"):WaitForChild("RF"):WaitForChild("Interact")
+    if not interactRemote then
+        print("Interact RemoteFunction not found!")
+        return
+    end
+    print("Interact RemoteFunction found")
+
+    -- == HITBOX EXTENDER FUNCTIONS ==
+    local function getBallId(ballModel)
+        local ballId = tonumber(ballModel.Name:match("CLIENT_BALL_(%d+)"))
+        return ballId
+    end
+
+    local function findClosestBall()
+        local closestBall, closestBallModel, closestDistance = nil, nil, EXTENDED_RANGE + 5
+        for _, descendant in pairs(Workspace:GetDescendants()) do
+            if descendant.Name:match("BALL") then
+                local ballPart = descendant:FindFirstChildWhichIsA("BasePart", true)
+                if ballPart then
+                    local distance = (humanoidRootPart.Position - ballPart.Position).Magnitude
+                    if distance <= EXTENDED_RANGE and distance < closestDistance then
+                        closestDistance = distance
+                        closestBall = ballPart
+                        closestBallModel = descendant
+                    end
+                end
+            end
+        end
+        return closestBall, closestBallModel
+    end
+
+    local function createHitboxSphere(ball, ballModel)
+        if not ball:IsA("BasePart") then
+            print("Ball is not a BasePart in model:", ballModel.Name)
+            return
+        end
+
+        print("Creating hitbox sphere for ball:", ball.Name, "in model:", ballModel.Name)
+
+        local sphere = Instance.new("Part")
+        sphere.Name = "HitboxSphere"
+        sphere.Size = Vector3.new(EXTENDED_RANGE * 2, EXTENDED_RANGE * 2, EXTENDED_RANGE * 2)
+        sphere.Shape = Enum.PartType.Ball
+        sphere.Position = ball.Position
+        sphere.Anchored = false
+        sphere.CanCollide = false
+        sphere.Transparency = sphereTransparency
+        sphere.Color = sphereColor
+
+        local outlineSphere = Instance.new("Part")
+        outlineSphere.Name = "OutlineSphere"
+        outlineSphere.Size = Vector3.new(EXTENDED_RANGE * 2 + 0.2, EXTENDED_RANGE * 2 + 0.2, EXTENDED_RANGE * 2 + 0.2)
+        outlineSphere.Shape = Enum.PartType.Ball
+        outlineSphere.Position = ball.Position
+        outlineSphere.Anchored = false
+        outlineSphere.CanCollide = false
+        outlineSphere.Transparency = sphereTransparency - 0.2
+        outlineSphere.Color = outlineColor
+
+        local weldMain = Instance.new("WeldConstraint")
+        weldMain.Part0 = ball
+        weldMain.Part1 = sphere
+        weldMain.Parent = sphere
+
+        local weldOutline = Instance.new("WeldConstraint")
+        weldOutline.Part0 = sphere
+        weldOutline.Part1 = outlineSphere
+        weldOutline.Parent = outlineSphere
+
+        sphere.Parent = ballModel
+        outlineSphere.Parent = ballModel
+
+        sphereReferences[ballModel] = { main = sphere, outline = outlineSphere }
+
+        print("Hitbox sphere created and welded for ball:", ball.Name, "Position:", sphere.Position)
+    end
+
+    local function updateSpheres()
+        for ballModel, spheres in pairs(sphereReferences) do
+            if spheres.main and spheres.outline then
+                spheres.main.Size = Vector3.new(EXTENDED_RANGE * 2, EXTENDED_RANGE * 2, EXTENDED_RANGE * 2)
+                spheres.outline.Size = Vector3.new(EXTENDED_RANGE * 2 + 0.2, EXTENDED_RANGE * 2 + 0.2, EXTENDED_RANGE * 2 + 0.2)
+                spheres.main.Transparency = sphereTransparency
+                spheres.outline.Transparency = sphereTransparency - 0.2
+                spheres.main.Color = sphereColor
+                spheres.outline.Color = outlineColor
+            end
+        end
+    end
+
+    local function removeSpheres()
+        for ballModel, spheres in pairs(sphereReferences) do
+            if spheres.main then spheres.main:Destroy() end
+            if spheres.outline then spheres.outline:Destroy() end
+            sphereReferences[ballModel] = nil
+        end
+    end
+
+    -- Clean up hitbox spheres when a ball is removed
+    Workspace.DescendantRemoving:Connect(function(descendant)
+        if descendant.Name:match("BALL") then
+            if sphereReferences[descendant] then
+                local spheres = sphereReferences[descendant]
+                if spheres.main then spheres.main:Destroy() end
+                if spheres.outline then spheres.outline:Destroy() end
+                sphereReferences[descendant] = nil
+                print("Removed hitbox sphere for ball model:", descendant.Name)
+            end
+        end
+    end)
+
+    -- Monitor new balls and add hitbox spheres
+    Workspace.DescendantAdded:Connect(function(descendant)
+        if not hitboxEnabled then return end
+        if not descendant.Name:match("BALL") then return end
+
+        print("Detected potential ball model:", descendant.Name)
+
+        -- Wait for the BasePart to be available (up to 5 seconds)
+        local ballPart
+        local startTime = tick()
+        local timeout = 5
+        while not ballPart and (tick() - startTime) < timeout do
+            ballPart = descendant:FindFirstChildWhichIsA("BasePart", true)
+            if not ballPart then
+                task.wait(0.1)
+            end
+        end
+
+        if ballPart then
+            print("Found BasePart in ball model:", ballPart.Name)
+            createHitboxSphere(ballPart, descendant)
+        else
+            print("No BasePart found in ball model after timeout:", descendant.Name)
+            -- Debug: List children of the ball model
+            local children = descendant:GetChildren()
+            local childNames = {}
+            for _, child in pairs(children) do
+                table.insert(childNames, child.Name .. " (" .. child.ClassName .. ")")
+            end
+            print("DEBUG: Children of ball model: " .. table.concat(childNames, ", "))
+        end
+    end)
+
+    -- Check existing balls when the script starts
+    for _, descendant in pairs(Workspace:GetDescendants()) do
+        if hitboxEnabled and descendant.Name:match("BALL") then
+            print("Detected existing ball model:", descendant.Name)
+            local ballPart = descendant:FindFirstChildWhichIsA("BasePart", true)
+            if ballPart then
+                createHitboxSphere(ballPart, descendant)
+            else
+                print("No BasePart found in ball model:", descendant.Name)
+                for _, child in pairs(descendant:GetChildren()) do
+                    print("Child in ball model:", child.Name, "Type:", child.ClassName)
+                end
+            end
+        end
+    end
+
+    -- == AIMING BEAM FUNCTIONS ==
+    local function createAimIndicator(character)
+        if not character then
+            print("Cannot create beam: character is nil")
+            return
+        end
+        
+        local startTime = tick()
+        local timeout = 10
+        while not character:FindFirstChild("HumanoidRootPart") do
+            if tick() - startTime > timeout then
+                print("Timeout waiting for HumanoidRootPart for character:", character.Name)
+                return
+            end
+            task.wait(0.1)
+        end
+        
+        local attachment0 = Instance.new("Attachment")
+        attachment0.Position = Vector3.new(0, 0, 0)
+        attachment0.Parent = character.HumanoidRootPart
+        
+        local attachment1 = Instance.new("Attachment")
+        attachment1.Parent = character.HumanoidRootPart
+        
+        local beam = Instance.new("Beam")
+        beam.Attachment0 = attachment0
+        beam.Attachment1 = attachment1
+        beam.Width0 = beamWidth
+        beam.Width1 = beamWidth
+        beam.Brightness = 1
+        beam.LightEmission = 1
+        beam.Color = ColorSequence.new(beamColor)
+        beam.Parent = character.HumanoidRootPart
+        
+        beams[character] = beam
+        print("Beam created for character:", character.Name)
+        
+        local connection
+        connection = RunService.Heartbeat:Connect(function()
+            if not character or not character.Parent or not character:FindFirstChild("HumanoidRootPart") then
+                connection:Disconnect()
+                if beams[character] then
+                    beams[character]:Destroy()
+                    beams[character] = nil
+                    print("Beam removed for character (update loop):", character and character.Name or "nil")
+                end
+                return
+            end
+            
+            local rootPart = character.HumanoidRootPart
+            local forwardVector = rootPart.CFrame.LookVector
+            local localOffset = rootPart.CFrame:VectorToObjectSpace(forwardVector * aimDistance)
+            attachment1.Position = localOffset
+        end)
+    end
+
+    local function removeBeam(character)
+        if beams[character] then
+            beams[character]:Destroy()
+            beams[character] = nil
+            print("Beam removed for character:", character and character.Name or "nil")
+        end
+    end
+
+    -- == MID-AIR CONTROL FUNCTIONS ==
+    local function setupMidAirControl(player)
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoid = character:WaitForChild("Humanoid")
+        local rootPart = character:WaitForChild("HumanoidRootPart")
+
+        local connections = {}
+        midAirConnections[player] = connections
+
+        local stateConnection = humanoid.StateChanged:Connect(function(oldState, newState)
+            if newState == Enum.HumanoidStateType.Freefall or newState == Enum.HumanoidStateType.Jumping then
+                humanoid.AutoRotate = true
+            end
+        end)
+        table.insert(connections, stateConnection)
+
+        local inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if not midAirEnabled then return end
+            if gameProcessed then return end
+
+            if humanoid:GetState() == Enum.HumanoidStateType.Freefall or humanoid:GetState() == Enum.HumanoidStateType.Jumping then
+                local moveDirection = Vector3.new()
+
+                if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.Up then
+                    moveDirection = moveDirection + Vector3.new(0, 0, -1)
+                elseif input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.Down then
+                    moveDirection = moveDirection + Vector3.new(0, 0, 1)
+                elseif input.KeyCode == Enum.KeyCode.A or input.KeyCode == Enum.KeyCode.Left then
+                    moveDirection = moveDirection + Vector3.new(-1, 0, 0)
+                elseif input.KeyCode == Enum.KeyCode.D or input.KeyCode == Enum.KeyCode.Right then
+                    moveDirection = moveDirection + Vector3.new(1, 0, 0)
+                end
+
+                if moveDirection.Magnitude > 0 then
+                    moveDirection = moveDirection.Unit
+                    local velocityBoost = moveDirection * midAirSpeed
+                    rootPart.Velocity = Vector3.new(
+                        velocityBoost.X,
+                        rootPart.Velocity.Y,
+                        velocityBoost.Z
+                    )
+                end
+            end
+        end)
+        table.insert(connections, inputConnection)
+    end
+
+    local function disableMidAirControl(player)
+        if midAirConnections[player] then
+            for _, connection in pairs(midAirConnections[player]) do
+                connection:Disconnect()
+            end
+            midAirConnections[player] = nil
+        end
+    end
+
+    -- == SERVE POWER OVERRIDE FUNCTIONS ==
+    local serveFunction = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index")
+        :WaitForChild("sleitnick_knit@1.7.0"):WaitForChild("knit")
+        :WaitForChild("Services"):WaitForChild("GameService"):WaitForChild("RF"):WaitForChild("Serve")
+
+    local oldNamecall
+    local function setupServeOverride()
+        if oldNamecall then return end
+
+        oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+
+            if self == serveFunction and method == "InvokeServer" and serveOverrideEnabled then
+                print("Serve invoked with power: " .. tostring(args[2]) .. ". Overriding to max power!")
+                args[2] = 1
+                return oldNamecall(self, unpack(args))
+            end
+
+            return oldNamecall(self, ...)
+        end)
+        print("Serve power override hook set up.")
+    end
+
+    local function disableServeOverride()
+        serveOverrideEnabled = false
+        print("Serve power override disabled.")
+    end
+
+    -- == STAT MODIFIER FUNCTIONS ==
+    local function applyStatModifiers()
+        local character = player.Character
+        if not character then return end
+
+        local humanoid = character:FindFirstChild("Humanoid")
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if not humanoid or not rootPart then return end
+
+        -- Apply to Humanoid properties
+        if statModifierEnabled then
+            humanoid.WalkSpeed = baseStats.WalkSpeed * multipliers.Speed
+            humanoid.JumpHeight = baseStats.JumpHeight * multipliers.JumpPower
+            print("DEBUG: Applied Humanoid boosts - WalkSpeed = " .. humanoid.WalkSpeed .. ", JumpHeight = " .. humanoid.JumpHeight)
+            -- Fallback to JumpPower if JumpHeight isn't working
+            if humanoid.JumpHeight == 0 then
+                humanoid.JumpPower = (baseStats.JumpHeight * 7) * multipliers.JumpPower -- Convert JumpHeight to JumpPower (approximate)
+                print("DEBUG: Fallback to JumpPower - JumpPower = " .. humanoid.JumpPower)
+            end
+
+            -- Visual feedback
+            local aura = Instance.new("ParticleEmitter")
+            aura.Color = ColorSequence.new(Color3.new(0.9, 0, 0.9), Color3.new(1, 0, 1))
+            aura.Size = NumberSequence.new(0.5, 0)
+            aura.Lifetime = NumberRange.new(1)
+            aura.Rate = 20
+            aura.Parent = rootPart
+            Debris:AddItem(aura, 5)
+        else
+            humanoid.WalkSpeed = baseStats.WalkSpeed
+            humanoid.JumpHeight = baseStats.JumpHeight
+            humanoid.JumpPower = baseStats.JumpHeight * 7 -- Reset JumpPower as well
+            print("DEBUG: Reset Humanoid stats - WalkSpeed = " .. humanoid.WalkSpeed .. ", JumpHeight = " .. humanoid.JumpHeight)
+        end
+
+        -- Check for a custom stats system
+        local statsModule = nil
+        local possibleLocations = {
+            player:FindFirstChild("PlayerStats"),
+            ReplicatedStorage:FindFirstChild("PlayerStats"),
+            ReplicatedStorage:FindFirstChild("GameData"),
+            ReplicatedStorage:FindFirstChild("PlayerData"),
+            player:FindFirstChild("Stats"),
+            character:FindFirstChild("Stats"),
+            player:FindFirstChild("leaderstats"),
+            character:FindFirstChild("PlayerStats"),
+            ReplicatedStorage:FindFirstChild("Data"),
+            ReplicatedStorage:FindFirstChild("Stats")
+        }
+
+        for _, location in pairs(possibleLocations) do
+            if location then
+                statsModule = location
+                print("DEBUG: Stats module found at " .. tostring(statsModule:GetFullName()))
+                break
+            end
+        end
+
+        if statsModule and statModifierEnabled then
+            for stat, multiplier in pairs(multipliers) do
+                local statValue = statsModule:FindFirstChild(stat)
+                if statValue then
+                    local oldValue = statValue.Value
+                    statValue.Value = statValue.Value * multiplier
+                    print("DEBUG: Applied " .. stat .. " multiplier: " .. oldValue .. " -> " .. statValue.Value)
+                else
+                    warn("DEBUG: Stat " .. stat .. " not found in stats module")
+                end
+            end
+        else
+            warn("DEBUG: No stats module found in common locations. Humanoid boosts applied.")
+            -- Debug: List children to help find stats
+            local function getNames(instances)
+                local names = {}
+                for _, instance in pairs(instances) do
+                    table.insert(names, instance.Name)
+                end
+                return table.concat(names, ", ")
+            end
+            print("DEBUG: Player children: " .. getNames(player:GetChildren()))
+            print("DEBUG: Character children: " .. getNames(character:GetChildren()))
+            print("DEBUG: ReplicatedStorage children: " .. getNames(ReplicatedStorage:GetChildren()))
+        end
+    end
+
+    local function setupStatModifiers(player)
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoid = character:WaitForChild("Humanoid")
+        local rootPart = character:WaitForChild("HumanoidRootPart")
+
+        local connections = {}
+        statConnections[player] = connections
+
+        -- Monitor WalkSpeed changes
+        local walkSpeedConnection = humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+            if not statModifierEnabled then return end
+            if humanoid.WalkSpeed ~= baseStats.WalkSpeed * multipliers.Speed then
+                humanoid.WalkSpeed = baseStats.WalkSpeed * multipliers.Speed
+                print("DEBUG: WalkSpeed reset to " .. humanoid.WalkSpeed)
+            end
+        end)
+        table.insert(connections, walkSpeedConnection)
+
+        -- Monitor JumpHeight changes
+        local jumpHeightConnection = humanoid:GetPropertyChangedSignal("JumpHeight"):Connect(function()
+            if not statModifierEnabled then return end
+            if humanoid.JumpHeight ~= baseStats.JumpHeight * multipliers.JumpPower then
+                humanoid.JumpHeight = baseStats.JumpHeight * multipliers.JumpPower
+                print("DEBUG: JumpHeight reset to " .. humanoid.JumpHeight)
+            end
+        end)
+        table.insert(connections, jumpHeightConnection)
+
+        -- Fallback: Monitor JumpPower changes
+        local jumpPowerConnection = humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
+            if not statModifierEnabled then return end
+            if humanoid.JumpHeight == 0 then
+                local targetJumpPower = (baseStats.JumpHeight * 7) * multipliers.JumpPower
+                if humanoid.JumpPower ~= targetJumpPower then
+                    humanoid.JumpPower = targetJumpPower
+                    print("DEBUG: JumpPower reset to " .. humanoid.JumpPower)
+                end
+            end
+        end)
+        table.insert(connections, jumpPowerConnection)
+
+        -- Handle character respawn
+        player.CharacterAdded:Connect(function(newCharacter)
+            humanoid = newCharacter:WaitForChild("Humanoid")
+            rootPart = newCharacter:WaitForChild("HumanoidRootPart")
+            applyStatModifiers()
+        end)
+    end
+
+    local function disableStatModifiers(player)
+        if statConnections[player] then
+            for _, connection in pairs(statConnections[player]) do
+                connection:Disconnect()
+            end
+            statConnections[player] = nil
+        end
+        local character = player.Character
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = baseStats.WalkSpeed
+                humanoid.JumpHeight = baseStats.JumpHeight
+                humanoid.JumpPower = baseStats.JumpHeight * 7
+            end
+        end
+    end
+
+    -- == NAME CHANGER FUNCTIONS ==
+    local function changePlayerName(newName)
+        local character = player.Character
+        if not character then
+            Library:Notify("Character not found!", 3)
+            return
+        end
+
+        -- Store the old name for reference
+        local oldName = character.Name
+
+        -- Change the name of the character in Workspace
+        pcall(function()
+            character.Name = newName
+            print("DEBUG: Changed character name in Workspace from " .. oldName .. " to " .. newName)
+        end)
+
+        -- Update the nametag in Workspace[player.Name].Nametag.PlayerName
+        local nametag = character:FindFirstChild("Nametag")
+        if nametag then
+            local playerName = nametag:FindFirstChild("PlayerName")
+            if playerName then
+                playerName.Text = newName
+                print("DEBUG: Changed Nametag PlayerName to " .. newName)
+                Library:Notify("Name changed to " .. newName, 3)
+            else
+                Library:Notify("PlayerName not found in Nametag!", 3)
+                -- Debug: List children of Nametag
+                local children = nametag:GetChildren()
+                local childNames = {}
+                for _, child in pairs(children) do
+                    table.insert(childNames, child.Name .. " (" .. child.ClassName .. ")")
+                end
+                print("DEBUG: Children of Nametag: " .. table.concat(childNames, ", "))
+            end
+        else
+            Library:Notify("Nametag not found in character!", 3)
+            -- Debug: List children of character
+            local children = character:GetChildren()
+            local childNames = {}
+            for _, child in pairs(children) do
+                table.insert(childNames, child.Name .. " (" .. child.ClassName .. ")")
+            end
+            print("DEBUG: Children of character: " .. table.concat(childNames, ", "))
+        end
+    end
+
+    -- == UI ELEMENTS ==
+    -- Main Tab: Main Section (Hitbox Extender and Aiming Beam)
+    local HitboxToggle = MainGroupbox:AddToggle("HitboxToggle", {
+        Text = "Enable Hitbox Extender",
+        Default = false,
+        Callback = function(Value)
+            hitboxEnabled = Value
+            if not hitboxEnabled then
+                removeSpheres()
+            else
+                for _, descendant in pairs(Workspace:GetDescendants()) do
+                    if descendant.Name:match("BALL") then
+                        local ballPart = descendant:FindFirstChildWhichIsA("BasePart", true)
+                        if ballPart then
+                            createHitboxSphere(ballPart, descendant)
+                        end
+                    end
+                end
+            end
+            Library:Notify(Value and "Hitbox Extender Enabled" or "Hitbox Extender Disabled", 3)
+        end
+    })
+
+    local AimToggle = MainGroupbox:AddToggle("AimToggle", {
+        Text = "Enable Aiming Beam",
+        Default = false,
+        Callback = function(Value)
+            aimEnabled = Value
+            if not aimEnabled then
+                for character, _ in pairs(beams) do
+                    removeBeam(character)
+                end
+            else
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player.Character then
+                        createAimIndicator(player.Character)
+                    end
+                end
+            end
+            Library:Notify(Value and "Aiming Beam Enabled" or "Aiming Beam Disabled", 3)
+        end
+    })
+
+    local TransparencySlider = MainGroupbox:AddSlider("TransparencySlider", {
+        Text = "Sphere Transparency",
+        Default = 70,
+        Min = 0,
+        Max = 100,
+        Rounding = 0,
+        Suffix = "%",
+        Callback = function(Value)
+            sphereTransparency = Value / 100
+            updateSpheres()
+        end
+    })
+
+    local HitboxSizeSlider = MainGroupbox:AddSlider("HitboxSizeSlider", {
+        Text = "Hitbox Size",
+        Default = 10,
+        Min = 5,
+        Max = 50,
+        Rounding = 0,
+        Suffix = " studs",
+        Callback = function(Value)
+            EXTENDED_RANGE = Value
+            updateSpheres()
+        end
+    })
+
+    local ColorPickerToggle = MainGroupbox:AddToggle("ColorPickerToggle", {
+        Text = "Sphere Color",
+        Default = false
+    })
+
+    local SphereColorPicker = ColorPickerToggle:AddColorPicker("SphereColorPicker", {
+        Title = "Select Sphere Color",
+        Default = Color3.fromRGB(255, 0, 0),
+        Callback = function(Value)
+            sphereColor = Value
+            updateSpheres()
+        end
+    })
+
+    -- Main Tab: Movement Settings Section (Mid-Air Control)
+    local MidAirToggle = MovementGroupbox:AddToggle("MidAirToggle", {
+        Text = "Enable Mid-Air Control",
+        Default = false,
+        Callback = function(Value)
+            midAirEnabled = Value
+            if not midAirEnabled then
+                for _, player in pairs(Players:GetPlayers()) do
+                    disableMidAirControl(player)
+                end
+            else
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player.Character then
+                        setupMidAirControl(player)
+                    end
+                end
+            end
+            Library:Notify(Value and "Mid-Air Control Enabled" or "Mid-Air Control Disabled", 3)
+        end
+    })
+
+    local MidAirSpeedSlider = MovementGroupbox:AddSlider("MidAirSpeedSlider", {
+        Text = "Mid-Air Speed",
+        Default = 20,
+        Min = 10,
+        Max = 50,
+        Rounding = 0,
+        Suffix = " studs/sec",
+        Callback = function(Value)
+            midAirSpeed = Value
+        end
+    })
+
+    -- Main Tab: Serve Settings Section (Serve Power Override)
+    local ServeOverrideToggle = ServeGroupbox:AddToggle("ServeOverrideToggle", {
+        Text = "Max Serve Power",
+        Default = false,
+        Callback = function(Value)
+            serveOverrideEnabled = Value
+            if serveOverrideEnabled then
+                setupServeOverride()
+            else
+                disableServeOverride()
+            end
+            Library:Notify(Value and "Max Serve Power Enabled" or "Max Serve Power Disabled", 3)
+        end
+    })
+
+    -- Stat Modifier Tab: Stats Section (Stat Multipliers)
+    local StatModifierToggle = StatsGroupbox:AddToggle("StatModifierToggle", {
+        Text = "Enable Stat Modifiers",
+        Default = false,
+        Callback = function(Value)
+            statModifierEnabled = Value
+            if not statModifierEnabled then
+                for _, player in pairs(Players:GetPlayers()) do
+                    disableStatModifiers(player)
+                end
+            else
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player.Character then
+                        setupStatModifiers(player)
+                        applyStatModifiers()
+                    end
+                end
+            end
+            Library:Notify(Value and "Stat Modifiers Enabled" or "Stat Modifiers Disabled", 3)
+        end
+    })
+
+    local SpeedMultiplierSlider = StatsGroupbox:AddSlider("SpeedMultiplierSlider", {
+        Text = "Speed Multiplier",
+        Default = 1.5,
+        Min = 1,
+        Max = 1.5,
+        Rounding = 2,
+        Suffix = "x",
+        Callback = function(Value)
+            multipliers.Speed = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    local SpikePowerMultiplierSlider = StatsGroupbox:AddSlider("SpikePowerMultiplierSlider", {
+        Text = "Spike Power Multiplier",
+        Default = 1.5,
+        Min = 1,
+        Max = 1.5,
+        Rounding = 2,
+        Suffix = "x",
+        Callback = function(Value)
+            multipliers.SpikePower = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    local JumpPowerMultiplierSlider = StatsGroupbox:AddSlider("JumpPowerMultiplierSlider", {
+        Text = "Jump Height Multiplier",
+        Default = 1.5,
+        Min = 1,
+        Max = 1.5,
+        Rounding = 2,
+        Suffix = "x",
+        Callback = function(Value)
+            multipliers.JumpPower = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    local BumpPowerMultiplierSlider = StatsGroupbox:AddSlider("BumpPowerMultiplierSlider", {
+        Text = "Bump Power Multiplier",
+        Default = 1.5,
+        Min = 1,
+        Max = 1.5,
+        Rounding = 2,
+        Suffix = "x",
+        Callback = function(Value)
+            multipliers.BumpPower = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    local DiveSpeedMultiplierSlider = StatsGroupbox:AddSlider("DiveSpeedMultiplierSlider", {
+        Text = "Dive Speed Multiplier",
+        Default = 1.5,
+        Min = 1,
+        Max = 1.5,
+        Rounding = 2,
+        Suffix = "x",
+        Callback = function(Value)
+            multipliers.DiveSpeed = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    local ServePowerMultiplierSlider = StatsGroupbox:AddSlider("ServePowerMultiplierSlider", {
+        Text = "Serve Power Multiplier",
+        Default = 1.5,
+        Min = 1,
+        Max = 1.5,
+        Rounding = 2,
+        Suffix = "x",
+        Callback = function(Value)
+            multipliers.ServePower = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    local SetPowerMultiplierSlider = StatsGroupbox:AddSlider("SetPowerMultiplierSlider", {
+        Text = "Set Power Multiplier",
+        Default = 1.5,
+        Min = 1,
+        Max = 1.5,
+        Rounding = 2,
+        Suffix = "x",
+        Callback = function(Value)
+            multipliers.SetPower = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    local BlockPowerMultiplierSlider = StatsGroupbox:AddSlider("BlockPowerMultiplierSlider", {
+        Text = "Block Power Multiplier",
+        Default = 1.5,
+        Min = 1,
+        Max = 1.5,
+        Rounding = 2,
+        Suffix = "x",
+        Callback = function(Value)
+            multipliers.BlockPower = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    -- Stat Modifier Tab: Movement Section (WalkSpeed and JumpHeight)
+    local WalkSpeedSlider = StatMovementGroupbox:AddSlider("WalkSpeedSlider", {
+        Text = "Walk Speed",
+        Default = 16,
+        Min = 0,
+        Max = 100,
+        Rounding = 0,
+        Suffix = " studs/sec",
+        Callback = function(Value)
+            baseStats.WalkSpeed = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    local JumpHeightSlider = StatMovementGroupbox:AddSlider("JumpHeightSlider", {
+        Text = "Jump Height",
+        Default = 7.2,
+        Min = 0,
+        Max = 20,
+        Rounding = 1,
+        Suffix = " studs",
+        Callback = function(Value)
+            baseStats.JumpHeight = Value
+            if statModifierEnabled then
+                applyStatModifiers()
+            end
+        end
+    })
+
+    -- Other Tab: Name Changer Section
+    local NameChangerTextbox = NameChangerGroupbox:AddInput("NameChangerTextbox", {
+        Text = "Change Name",
+        Default = player.Name,
+        Placeholder = "Enter new name",
+        Callback = function(Value)
+            changePlayerName(Value)
+        end
+    })
+
+    -- Ui Settings Tab: UI Customization Section
+    -- Config Management
+    local ConfigNameInput = UiCustomizationGroupbox:AddInput("ConfigNameInput", {
+        Text = "Config Name",
+        Placeholder = "Enter config name",
+        Callback = function(Value)
+            -- Store the config name for saving/loading
+        end
+    })
+
+    local SaveConfigButton = UiCustomizationGroupbox:AddButton({
+        Text = "Save Config",
+        Callback = function()
+            local configName = ConfigNameInput.Value
+            if configName == "" then
+                Library:Notify("Please enter a config name!", 3)
+                return
+            end
+            Library:SaveConfig(configName)
+            Library:Notify("Config '" .. configName .. "' saved!", 3)
+        end
+    })
+
+    local LoadConfigButton = UiCustomizationGroupbox:AddButton({
+        Text = "Load Config",
+        Callback = function()
+            local configName = ConfigNameInput.Value
+            if configName == "" then
+                Library:Notify("Please enter a config name!", 3)
+                return
+            end
+            Library:LoadConfig(configName)
+            Library:Notify("Config '" .. configName .. "' loaded!", 3)
+        end
+    })
+
+    local DeleteConfigButton = UiCustomizationGroupbox:AddButton({
+        Text = "Delete Config",
+        Callback = function()
+            local configName = ConfigNameInput.Value
+            if configName == "" then
+                Library:Notify("Please enter a config name!", 3)
+                return
+            end
+            Library:DeleteConfig(configName)
+            Library:Notify("Config '" .. configName .. "' deleted!", 3)
+        end
+    })
+
+    -- UI Customization Options (Removed Color Pickers to Avoid Error)
+    local ThemeDropdown = UiCustomizationGroupbox:AddDropdown("ThemeDropdown", {
+        Text = "Select Theme",
+        Values = {"Dark", "Light", "Mocha", "Aqua", "Jester"},
+        Default = "Dark",
+        Callback = function(Value)
+            Library:SetTheme(Value)
+            Library:Notify("Theme set to " .. Value, 3)
+        end
+    })
+
+    -- Add a label to indicate color pickers are disabled for now
+    local ColorPickerDisabledLabel = UiCustomizationGroupbox:AddLabel("Color customization disabled due to library issues.")
+
+    -- == HITBOX EXTENDER: HANDLE PLAYER RESPAWN ==
+    player.CharacterAdded:Connect(function(newCharacter)
+        character = newCharacter
+        humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        applyStatModifiers()
+    end)
+
+    -- == HITBOX EXTENDER: HANDLE CLICKING ==
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not hitboxEnabled then return end
+        if gameProcessed or input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+        local currentTime = tick()
+        if currentTime - lastHitTime < HIT_COOLDOWN then return end
+
+        local ball, ballModel = findClosestBall()
+        if not ball or not ballModel then
+            print("No ball in range")
+            return
+        end
+
+        local ballId = getBallId(ballModel)
+        if not ballId then
+            print("Could not get BallId from:", ballModel.Name)
+            return
+        end
+
+        local args = {
+            [1] = {
+                ["Charge"] = 1,
+                ["Action"] = "Spike",
+                ["SpecialCharge"] = 0.000001,
+                ["TiltDirection"] = humanoidRootPart.CFrame.LookVector,
+                ["BallId"] = ballId,
+                ["MoveDirection"] = humanoidRootPart.CFrame.LookVector,
+                ["From"] = "Client",
+                ["HitboxSize"] = Vector3.new(EXTENDED_RANGE * 2, EXTENDED_RANGE * 2, EXTENDED_RANGE * 2),
+                ["LookVector"] = humanoidRootPart.CFrame.LookVector
+            }
+        }
+
+        local success, result = pcall(function()
+            return interactRemote:InvokeServer(unpack(args))
+        end)
+        print("Interact invoked. Success:", success, "Result:", result)
+
+        lastHitTime = currentTime
+    end)
+
+    -- == AIMING BEAM: CONNECT NEW PLAYERS ==
+    Players.PlayerAdded:Connect(function(player)
+        print("New player joined:", player.Name)
+        
+        if player.Character and aimEnabled then
+            print("Character already exists for new player:", player.Name)
+            createAimIndicator(player.Character)
+        end
+        
+        if player.Character and midAirEnabled then
+            setupMidAirControl(player)
+        end
+        
+        if player.Character and statModifierEnabled then
+            setupStatModifiers(player)
+            applyStatModifiers()
+        end
+        
+        player.CharacterAdded:Connect(function(character)
+            print("Character added for player:", player.Name)
+            if aimEnabled then
+                createAimIndicator(character)
+            end
+            if midAirEnabled then
+                setupMidAirControl(player)
+            end
+            if statModifierEnabled then
+                setupStatModifiers(player)
+                applyStatModifiers()
+            end
+            character.AncestryChanged:Connect(function()
+                if not character.Parent then
+                    removeBeam(character)
+                    disableMidAirControl(player)
+                    disableStatModifiers(player)
+                end
+            end)
+        end)
+        
+        local attempts = 0
+        while not player.Character do
+            attempts = attempts + 1
+            if attempts > 50 then
+                print("Failed to find character for player after polling:", player.Name)
+                break
+            end
+            task.wait(0.1)
+        end
+        if player.Character and not beams[player.Character] and aimEnabled then
+            print("Character found for new player (polling):", player.Name)
+            createAimIndicator(player.Character)
+        end
+        if player.Character and not midAirConnections[player] and midAirEnabled then
+            setupMidAirControl(player)
+        end
+        if player.Character and not statConnections[player] and statModifierEnabled then
+            setupStatModifiers(player)
+            applyStatModifiers()
+        end
+    end)
+
+    -- == AIMING BEAM: CLEAN UP WHEN PLAYERS LEAVE ==
+    Players.PlayerRemoving:Connect(function(player)
+        print("Player left:", player.Name)
+        if player.Character then
+            removeBeam(player.Character)
+            disableMidAirControl(player)
+            disableStatModifiers(player)
+        end
+    end)
+
+    -- == AIMING BEAM: HANDLE EXISTING PLAYERS ==
+    for _, player in pairs(Players:GetPlayers()) do
+        if player.Character and aimEnabled then
+            print("Creating beam for existing player:", player.Name)
+            createAimIndicator(player.Character)
+        end
+        if player.Character and midAirEnabled then
+            setupMidAirControl(player)
+        end
+        if player.Character and statModifierEnabled then
+            setupStatModifiers(player)
+            applyStatModifiers()
+        end
+    end
+
+    -- == SHOW THE UI ==
+    Library:Toggle(true)
+    print("Main UI should now be visible. Press RightControl to toggle.")
+end
+
+-- == INITIALIZE THE KEY SYSTEM ==
+Library:Toggle(true)
+print("Key system UI should now be visible. Press RightControl to toggle.")
