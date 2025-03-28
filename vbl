@@ -1,4 +1,4 @@
-locallocal service = 3118; -- Set your PlatoBoost ID  
+local service = 3118; -- Set your PlatoBoost ID  
 local secret = "2866565e-a6dd-4aa1-b5db-d2e4e1ee9801"; -- Set your PlatoBoost API key  
 local useNonce = false; -- Disable nonce to prevent expiration issues  
 local onMessage = function(message)  
