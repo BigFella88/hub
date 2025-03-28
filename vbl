@@ -1,6 +1,6 @@
 local service = 3118;--Set your PlatoboosId    
 local secret = "2866565e-a6dd-4aa1-b5db-d2e4e1ee9801"; --Set Your Platoboost Api key
-local useNonce = true; 
+local useNonce = false; 
 local onMessage = function(message)  game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", { Text = message; }) end;
 
 
