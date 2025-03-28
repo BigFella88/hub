@@ -1,3 +1,6 @@
+-- Debug: Log script start
+print("Main script started")
+
 local service = 3118 -- Your Platoboost service ID
 local secret = "2866565e-a6dd-4aa1-b5db-d2e4e1ee9801" -- Your Platoboost API key
 
@@ -10,8 +13,9 @@ end
 
 local host = "https://api.platoboost.com"
 
--- Function to get a new key **after** Linkvertise (UNCHANGED)
+-- Function to get a new key **after** Linkvertise
 local function getFreshKey()
+    print("getFreshKey called")
     local response = request({
         Url = host .. "/public/start",
         Method = "POST",
@@ -27,15 +31,16 @@ local function getFreshKey()
     if response.StatusCode == 200 then
         local data = HttpService:JSONDecode(response.Body)
         if data.success then
-            return data.data.url -- Return the fresh key URL
+            return data.data.url
         end
     end
 
     return nil
 end
 
--- Automatically generate and copy a fresh key link (UNCHANGED)
+-- Automatically generate and copy a fresh key link
 local function copyNewKey()
+    print("copyNewKey called")
     local freshKey = getFreshKey()
     if freshKey then
         setclipboard(freshKey)
@@ -45,12 +50,12 @@ local function copyNewKey()
     end
 end
 
--- Run automatically when script executes (UNCHANGED)
+-- Run automatically when script executes
 copyNewKey()
 
--- Function to redeem key (No nonce, so no expiration) - UPDATED
+-- Function to redeem key (No nonce, so no expiration)
 function redeemKey(key)
-    print("Attempting to redeem key at: " .. host .. "/public/redeem/" .. tostring(service))
+    print("redeemKey called with key: " .. tostring(key))
     local endpoint = host .. "/public/redeem/" .. tostring(service)
 
     local body = {
@@ -59,7 +64,7 @@ function redeemKey(key)
     }
 
     local success, response = pcall(function()
-        return request({ -- Replaced HttpService:RequestAsync with request
+        return request({
             Url = endpoint,
             Method = "POST",
             Body = HttpService:JSONEncode(body),
@@ -75,9 +80,6 @@ function redeemKey(key)
         return false
     end
 
-    print("redeemKey HTTP response status: " .. tostring(response.StatusCode))
-    print("redeemKey response body: " .. tostring(response.Body))
-
     if response.StatusCode == 200 then
         local success, decoded = pcall(function()
             return HttpService:JSONDecode(response.Body)
@@ -88,7 +90,6 @@ function redeemKey(key)
             return false
         end
 
-        print("redeemKey decoded response: ", decoded)
         if decoded.success == true and decoded.data.valid == true then
             return true
         else
@@ -104,6 +105,7 @@ end
 -- == LOAD THE OBSIDIAN UI LIBRARY ==
 local Library
 local success, result = pcall(function()
+    print("Loading Obsidian UI Library")
     return loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/Library.lua"))()
 end)
 
@@ -116,7 +118,7 @@ print("Obsidian UI Library loaded successfully")
 
 -- == CREATE THE KEY SYSTEM WINDOW ==
 local KeyWindow
-local KeyScreenGui -- To store the ScreenGui instance
+local KeyScreenGui
 success, KeyWindow = pcall(function()
     local window = Library:CreateWindow({
         Title = "Lyez Key System",
@@ -125,7 +127,6 @@ success, KeyWindow = pcall(function()
         Center = true,
         AutoShow = true
     })
-    -- Find the ScreenGui created by the library
     for _, gui in pairs(game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"):GetChildren()) do
         if gui:IsA("ScreenGui") and gui.Name:match("Obsidian") then
             KeyScreenGui = gui
@@ -164,7 +165,6 @@ end
 print("Key system groupbox created successfully")
 
 -- == KEY SYSTEM UI ELEMENTS ==
--- Textbox for entering the key
 local KeyInput
 success, KeyInput = pcall(function()
     return KeyGroupbox:AddInput("KeyInput", {
@@ -181,7 +181,6 @@ if not success or not KeyInput then
 end
 print("Key input created successfully")
 
--- "Get Key" button to copy the Platoboost link (UNCHANGED)
 local GetKeyButton
 success, GetKeyButton = pcall(function()
     return KeyGroupbox:AddButton({
@@ -200,7 +199,6 @@ if not success or not GetKeyButton then
 end
 print("Get Key button created successfully")
 
--- "Check Key" button to validate the entered key
 local CheckKeyButton
 success, CheckKeyButton = pcall(function()
     return KeyGroupbox:AddButton({
@@ -221,12 +219,10 @@ success, CheckKeyButton = pcall(function()
                 Library:Notify("Key validated successfully!", 3)
                 print("Attempting to unload key system UI...")
 
-                -- Unload the key system UI using Library:Unload()
                 local cleanupSuccess, cleanupError = pcall(function()
                     Library:Unload()
                     print("Key system UI unloaded using Library:Unload()")
 
-                    -- Clear references to UI elements
                     KeyWindow = nil
                     KeyTab = nil
                     KeyGroupbox = nil
@@ -235,22 +231,17 @@ success, CheckKeyButton = pcall(function()
                     CheckKeyButton = nil
                     KeyScreenGui = nil
 
-                    -- Clear the Library reference to force reinitialization
                     Library = nil
 
                     collectgarbage("collect")
                     print("Key system UI references cleared and garbage collected")
 
-                    -- Verify no Obsidian UI elements remain
                     local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
                     local foundGui = false
                     for _, gui in pairs(playerGui:GetChildren()) do
                         if gui:IsA("ScreenGui") and gui.Name:match("Obsidian") then
                             foundGui = true
                             warn("Lingering ScreenGui found after unload: " .. gui.Name .. " (Enabled: " .. tostring(gui.Enabled) .. ")")
-                            for _, child in pairs(gui:GetChildren()) do
-                                print("Child of lingering ScreenGui: " .. child.Name .. " (" .. child.ClassName .. ")")
-                            end
                         end
                     end
                     if not foundGui then
@@ -266,11 +257,9 @@ success, CheckKeyButton = pcall(function()
                     print("Unload completed successfully")
                 end
 
-                -- Wait for 2 seconds before loading main UI
                 print("Waiting for 2 seconds before loading main UI...")
                 task.wait(2)
 
-                -- Proceed to load main UI
                 print("Proceeding to load main UI...")
                 local mainUISuccess, mainUIError = pcall(loadMainUI)
                 if not mainUISuccess then
@@ -294,11 +283,11 @@ print("Check Key button created successfully")
 
 -- == FUNCTION TO LOAD THE MAIN UI WITH HITBOX EXTENDER AND FEATURES ==
 function loadMainUI()
-    print("Loading main UI")
+    print("loadMainUI called")
 
-    -- Since Library:Unload() was called, we need to reload the library
     if not Library then
         local success, result = pcall(function()
+            print("Reloading Obsidian UI Library")
             return loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/Library.lua"))()
         end)
 
@@ -310,7 +299,6 @@ function loadMainUI()
         print("Obsidian UI Library reloaded successfully")
     end
 
-    -- == CREATE THE UI WINDOW ==
     local Window
     local success, Window = pcall(function()
         return Library:CreateWindow({
@@ -328,28 +316,22 @@ function loadMainUI()
     end
     print("UI window created successfully")
 
-    -- == CREATE TABS IN THE WINDOW ==
     local MainTab = Window:AddTab("Main", "home")
     local StatModifierTab = Window:AddTab("Stat Modifier", "stats")
     local OtherTab = Window:AddTab("Other", "misc")
     local UiSettingsTab = Window:AddTab("Ui Settings", "settings")
 
-    -- == CREATE GROUPBOXES FOR MAIN TAB ==
     local MainGroupbox = MainTab:AddLeftGroupbox("Main")
     local MovementGroupbox = MainTab:AddRightGroupbox("Movement Settings")
     local ServeGroupbox = MainTab:AddRightGroupbox("Serve Settings")
 
-    -- == CREATE GROUPBOXES FOR STAT MODIFIER TAB ==
     local StatsGroupbox = StatModifierTab:AddLeftGroupbox("Stats")
     local StatMovementGroupbox = StatModifierTab:AddRightGroupbox("Movement")
 
-    -- == CREATE GROUPBOXES FOR OTHER TAB ==
     local NameChangerGroupbox = OtherTab:AddLeftGroupbox("Name Changer")
 
-    -- == CREATE GROUPBOXES FOR UI SETTINGS TAB ==
     local UiCustomizationGroupbox = UiSettingsTab:AddLeftGroupbox("UI Customization")
 
-    -- == SERVICES ==
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -361,8 +343,6 @@ function loadMainUI()
     local character = player.Character or player.CharacterAdded:Wait()
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
-    -- == CONFIGURATION VARIABLES ==
-    -- HITBOX EXTENDER CONFIG
     local hitboxEnabled = false
     local EXTENDED_RANGE = 10
     local sphereTransparency = 0.7
@@ -371,20 +351,16 @@ function loadMainUI()
     local HIT_COOLDOWN = 1
     local lastHitTime = 0
 
-    -- AIMING BEAM CONFIG
     local aimEnabled = false
     local beamColor = Color3.fromRGB(255, 0, 0)
     local beamWidth = 2
     local aimDistance = 20
 
-    -- MID-AIR CONTROL CONFIG
     local midAirEnabled = false
     local midAirSpeed = 20
 
-    -- SERVE POWER OVERRIDE CONFIG
     local serveOverrideEnabled = false
 
-    -- STAT MODIFIER CONFIG
     local statModifierEnabled = false
     local multipliers = {
         Speed = 1.5,
@@ -397,17 +373,15 @@ function loadMainUI()
         BlockPower = 1.5
     }
     local baseStats = {
-        WalkSpeed = 16, -- Default Roblox WalkSpeed
-        JumpHeight = 7.2 -- Default Roblox JumpHeight (equivalent to JumpPower of 50)
+        WalkSpeed = 16,
+        JumpHeight = 7.2
     }
 
-    -- == STORAGE FOR HITBOX SPHERES, BEAMS, AND CONNECTIONS ==
     local sphereReferences = {}
     local beams = {}
     local midAirConnections = {}
     local statConnections = {}
 
-    -- == FIND THE INTERACT REMOTE FUNCTION ==
     local interactRemote = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.7.0"):WaitForChild("knit"):WaitForChild("Services"):WaitForChild("BallService"):WaitForChild("RF"):WaitForChild("Interact")
     if not interactRemote then
         print("Interact RemoteFunction not found!")
@@ -415,7 +389,6 @@ function loadMainUI()
     end
     print("Interact RemoteFunction found")
 
-    -- == HITBOX EXTENDER FUNCTIONS ==
     local function getBallId(ballModel)
         local ballId = tonumber(ballModel.Name:match("CLIENT_BALL_(%d+)"))
         return ballId
@@ -454,6 +427,7 @@ function loadMainUI()
         sphere.Position = ball.Position
         sphere.Anchored = false
         sphere.CanCollide = false
+        sphere.Massless = true
         sphere.Transparency = sphereTransparency
         sphere.Color = sphereColor
 
@@ -463,9 +437,25 @@ function loadMainUI()
         outlineSphere.Shape = Enum.PartType.Ball
         outlineSphere.Position = ball.Position
         outlineSphere.Anchored = false
-        sphere.CanCollide = false
+        outlineSphere.CanCollide = false
+        outlineSphere.Massless = true
         outlineSphere.Transparency = sphereTransparency - 0.2
         outlineSphere.Color = outlineColor
+
+        local success, physicsService = pcall(function()
+            return game:GetService("PhysicsService")
+        end)
+        if success and physicsService then
+            local groupName = "NonCollidableHitbox"
+            pcall(function()
+                physicsService:CreateCollisionGroup(groupName)
+                physicsService:CollisionGroupSetCollidable(groupName, groupName, false)
+                physicsService:CollisionGroupSetCollidable(groupName, "Default", false)
+                physicsService:SetPartCollisionGroup(sphere, groupName)
+                physicsService:SetPartCollisionGroup(outlineSphere, groupName)
+                print("Set collision group for hitbox spheres to non-collidable")
+            end)
+        end
 
         local weldMain = Instance.new("WeldConstraint")
         weldMain.Part0 = ball
@@ -506,7 +496,6 @@ function loadMainUI()
         end
     end
 
-    -- Clean up hitbox spheres when a ball is removed
     Workspace.DescendantRemoving:Connect(function(descendant)
         if descendant.Name:match("BALL") then
             if sphereReferences[descendant] then
@@ -519,14 +508,12 @@ function loadMainUI()
         end
     end)
 
-    -- Monitor new balls and add hitbox spheres
     Workspace.DescendantAdded:Connect(function(descendant)
         if not hitboxEnabled then return end
         if not descendant.Name:match("BALL") then return end
 
         print("Detected potential ball model:", descendant.Name)
 
-        -- Wait for the BasePart to be available (up to 5 seconds)
         local ballPart
         local startTime = tick()
         local timeout = 5
@@ -542,17 +529,9 @@ function loadMainUI()
             createHitboxSphere(ballPart, descendant)
         else
             print("No BasePart found in ball model after timeout:", descendant.Name)
-            -- Debug: List children of the ball model
-            local children = descendant:GetChildren()
-            local childNames = {}
-            for _, child in pairs(children) do
-                table.insert(childNames, child.Name .. " (" .. child.ClassName .. ")")
-            end
-            print("DEBUG: Children of ball model: " .. table.concat(childNames, ", "))
         end
     end)
 
-    -- Check existing balls when the script starts
     for _, descendant in pairs(Workspace:GetDescendants()) do
         if hitboxEnabled and descendant.Name:match("BALL") then
             print("Detected existing ball model:", descendant.Name)
@@ -561,14 +540,10 @@ function loadMainUI()
                 createHitboxSphere(ballPart, descendant)
             else
                 print("No BasePart found in ball model:", descendant.Name)
-                for _, child in pairs(descendant:GetChildren()) do
-                    print("Child in ball model:", child.Name, "Type:", child.ClassName)
-                end
             end
         end
     end
 
-    -- == AIMING BEAM FUNCTIONS ==
     local function createAimIndicator(character)
         if not character then
             print("Cannot create beam: character is nil")
@@ -632,7 +607,6 @@ function loadMainUI()
         end
     end
 
-    -- == MID-AIR CONTROL FUNCTIONS ==
     local function setupMidAirControl(player)
         local character = player.Character or player.CharacterAdded:Wait()
         local humanoid = character:WaitForChild("Humanoid")
@@ -688,7 +662,6 @@ function loadMainUI()
         end
     end
 
-    -- == SERVE POWER OVERRIDE FUNCTIONS ==
     local serveFunction = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index")
         :WaitForChild("sleitnick_knit@1.7.0"):WaitForChild("knit")
         :WaitForChild("Services"):WaitForChild("GameService"):WaitForChild("RF"):WaitForChild("Serve")
@@ -717,7 +690,6 @@ function loadMainUI()
         print("Serve power override disabled.")
     end
 
-    -- == STAT MODIFIER FUNCTIONS ==
     local function applyStatModifiers()
         local character = player.Character
         if not character then return end
@@ -726,18 +698,15 @@ function loadMainUI()
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not humanoid or not rootPart then return end
 
-        -- Apply to Humanoid properties
         if statModifierEnabled then
             humanoid.WalkSpeed = baseStats.WalkSpeed * multipliers.Speed
             humanoid.JumpHeight = baseStats.JumpHeight * multipliers.JumpPower
             print("DEBUG: Applied Humanoid boosts - WalkSpeed = " .. humanoid.WalkSpeed .. ", JumpHeight = " .. humanoid.JumpHeight)
-            -- Fallback to JumpPower if JumpHeight isn't working
             if humanoid.JumpHeight == 0 then
-                humanoid.JumpPower = (baseStats.JumpHeight * 7) * multipliers.JumpPower -- Convert JumpHeight to JumpPower (approximate)
+                humanoid.JumpPower = (baseStats.JumpHeight * 7) * multipliers.JumpPower
                 print("DEBUG: Fallback to JumpPower - JumpPower = " .. humanoid.JumpPower)
             end
 
-            -- Visual feedback
             local aura = Instance.new("ParticleEmitter")
             aura.Color = ColorSequence.new(Color3.new(0.9, 0, 0.9), Color3.new(1, 0, 1))
             aura.Size = NumberSequence.new(0.5, 0)
@@ -748,11 +717,10 @@ function loadMainUI()
         else
             humanoid.WalkSpeed = baseStats.WalkSpeed
             humanoid.JumpHeight = baseStats.JumpHeight
-            humanoid.JumpPower = baseStats.JumpHeight * 7 -- Reset JumpPower as well
+            humanoid.JumpPower = baseStats.JumpHeight * 7
             print("DEBUG: Reset Humanoid stats - WalkSpeed = " .. humanoid.WalkSpeed .. ", JumpHeight = " .. humanoid.JumpHeight)
         end
 
-        -- Check for a custom stats system
         local statsModule = nil
         local possibleLocations = {
             player:FindFirstChild("PlayerStats"),
@@ -788,17 +756,6 @@ function loadMainUI()
             end
         else
             warn("DEBUG: No stats module found in common locations. Humanoid boosts applied.")
-            -- Debug: List children to help find stats
-            local function getNames(instances)
-                local names = {}
-                for _, instance in pairs(instances) do
-                    table.insert(names, instance.Name)
-                end
-                return table.concat(names, ", ")
-            end
-            print("DEBUG: Player children: " .. getNames(player:GetChildren()))
-            print("DEBUG: Character children: " .. getNames(character:GetChildren()))
-            print("DEBUG: ReplicatedStorage children: " .. getNames(ReplicatedStorage:GetChildren()))
         end
     end
 
@@ -810,7 +767,6 @@ function loadMainUI()
         local connections = {}
         statConnections[player] = connections
 
-        -- Monitor WalkSpeed changes
         local walkSpeedConnection = humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
             if not statModifierEnabled then return end
             if humanoid.WalkSpeed ~= baseStats.WalkSpeed * multipliers.Speed then
@@ -820,7 +776,6 @@ function loadMainUI()
         end)
         table.insert(connections, walkSpeedConnection)
 
-        -- Monitor JumpHeight changes
         local jumpHeightConnection = humanoid:GetPropertyChangedSignal("JumpHeight"):Connect(function()
             if not statModifierEnabled then return end
             if humanoid.JumpHeight ~= baseStats.JumpHeight * multipliers.JumpPower then
@@ -830,7 +785,6 @@ function loadMainUI()
         end)
         table.insert(connections, jumpHeightConnection)
 
-        -- Fallback: Monitor JumpPower changes
         local jumpPowerConnection = humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
             if not statModifierEnabled then return end
             if humanoid.JumpHeight == 0 then
@@ -843,7 +797,6 @@ function loadMainUI()
         end)
         table.insert(connections, jumpPowerConnection)
 
-        -- Handle character respawn
         player.CharacterAdded:Connect(function(newCharacter)
             humanoid = newCharacter:WaitForChild("Humanoid")
             rootPart = newCharacter:WaitForChild("HumanoidRootPart")
@@ -869,7 +822,6 @@ function loadMainUI()
         end
     end
 
-    -- == NAME CHANGER FUNCTIONS ==
     local function changePlayerName(newName)
         local character = player.Character
         if not character then
@@ -877,16 +829,13 @@ function loadMainUI()
             return
         end
 
-        -- Store the old name for reference
         local oldName = character.Name
 
-        -- Change the name of the character in Workspace
         pcall(function()
             character.Name = newName
             print("DEBUG: Changed character name in Workspace from " .. oldName .. " to " .. newName)
         end)
 
-        -- Update the nametag in Workspace[player.Name].Nametag.PlayerName
         local nametag = character:FindFirstChild("Nametag")
         if nametag then
             local playerName = nametag:FindFirstChild("PlayerName")
@@ -896,28 +845,12 @@ function loadMainUI()
                 Library:Notify("Name changed to " .. newName, 3)
             else
                 Library:Notify("PlayerName not found in Nametag!", 3)
-                -- Debug: List children of Nametag
-                local children = nametag:GetChildren()
-                local childNames = {}
-                for _, child in pairs(children) do
-                    table.insert(childNames, child.Name .. " (" .. child.ClassName .. ")")
-                end
-                print("DEBUG: Children of Nametag: " .. table.concat(childNames, ", "))
             end
         else
             Library:Notify("Nametag not found in character!", 3)
-            -- Debug: List children of character
-            local children = character:GetChildren()
-            local childNames = {}
-            for _, child in pairs(children) do
-                table.insert(childNames, child.Name .. " (" .. child.ClassName .. ")")
-            end
-            print("DEBUG: Children of character: " .. table.concat(childNames, ", "))
         end
     end
 
-    -- == UI ELEMENTS ==
-    -- Main Tab: Main Section (Hitbox Extender and Aiming Beam)
     local HitboxToggle = MainGroupbox:AddToggle("HitboxToggle", {
         Text = "Enable Hitbox Extender",
         Default = false,
@@ -999,7 +932,6 @@ function loadMainUI()
         end
     })
 
-    -- Main Tab: Movement Settings Section (Mid-Air Control)
     local MidAirToggle = MovementGroupbox:AddToggle("MidAirToggle", {
         Text = "Enable Mid-Air Control",
         Default = false,
@@ -1032,7 +964,6 @@ function loadMainUI()
         end
     })
 
-    -- Main Tab: Serve Settings Section (Serve Power Override)
     local ServeOverrideToggle = ServeGroupbox:AddToggle("ServeOverrideToggle", {
         Text = "Max Serve Power",
         Default = false,
@@ -1047,7 +978,6 @@ function loadMainUI()
         end
     })
 
-    -- Stat Modifier Tab: Stats Section (Stat Multipliers)
     local StatModifierToggle = StatsGroupbox:AddToggle("StatModifierToggle", {
         Text = "Enable Stat Modifiers",
         Default = false,
@@ -1189,7 +1119,6 @@ function loadMainUI()
         end
     })
 
-    -- Stat Modifier Tab: Movement Section (WalkSpeed and JumpHeight)
     local WalkSpeedSlider = StatMovementGroupbox:AddSlider("WalkSpeedSlider", {
         Text = "Walk Speed",
         Default = 16,
@@ -1220,7 +1149,6 @@ function loadMainUI()
         end
     })
 
-    -- Other Tab: Name Changer Section
     local NameChangerTextbox = NameChangerGroupbox:AddInput("NameChangerTextbox", {
         Text = "Change Name",
         Default = player.Name,
@@ -1230,13 +1158,10 @@ function loadMainUI()
         end
     })
 
-    -- Ui Settings Tab: UI Customization Section
-    -- Config Management
     local ConfigNameInput = UiCustomizationGroupbox:AddInput("ConfigNameInput", {
         Text = "Config Name",
         Placeholder = "Enter config name",
         Callback = function(Value)
-            -- Store the config name for saving/loading
         end
     })
 
@@ -1279,7 +1204,6 @@ function loadMainUI()
         end
     })
 
-    -- UI Customization Options (Removed Color Pickers to Avoid Error)
     local ThemeDropdown = UiCustomizationGroupbox:AddDropdown("ThemeDropdown", {
         Text = "Select Theme",
         Values = {"Dark", "Light", "Mocha", "Aqua", "Jester"},
@@ -1290,17 +1214,14 @@ function loadMainUI()
         end
     })
 
-    -- Add a label to indicate color pickers are disabled for now
     local ColorPickerDisabledLabel = UiCustomizationGroupbox:AddLabel("Color customization disabled due to library issues.")
 
-    -- == HITBOX EXTENDER: HANDLE PLAYER RESPAWN ==
     player.CharacterAdded:Connect(function(newCharacter)
         character = newCharacter
         humanoidRootPart = character:WaitForChild("HumanoidRootPart")
         applyStatModifiers()
     end)
 
-    -- == HITBOX EXTENDER: HANDLE CLICKING ==
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if not hitboxEnabled then return end
         if gameProcessed or input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
@@ -1341,7 +1262,6 @@ function loadMainUI()
         lastHitTime = currentTime
     end)
 
-    -- == AIMING BEAM: CONNECT NEW PLAYERS ==
     Players.PlayerAdded:Connect(function(player)
         print("New player joined:", player.Name)
         
@@ -1402,7 +1322,6 @@ function loadMainUI()
         end
     end)
 
-    -- == AIMING BEAM: CLEAN UP WHEN PLAYERS LEAVE ==
     Players.PlayerRemoving:Connect(function(player)
         print("Player left:", player.Name)
         if player.Character then
@@ -1412,7 +1331,6 @@ function loadMainUI()
         end
     end)
 
-    -- == AIMING BEAM: HANDLE EXISTING PLAYERS ==
     for _, player in pairs(Players:GetPlayers()) do
         if player.Character and aimEnabled then
             print("Creating beam for existing player:", player.Name)
@@ -1427,11 +1345,12 @@ function loadMainUI()
         end
     end
 
-    -- == SHOW THE UI ==
     Library:Toggle(true)
     print("Main UI should now be visible. Press RightControl to toggle.")
 end
 
--- == INITIALIZE THE KEY SYSTEM ==
 Library:Toggle(true)
 print("Key system UI should now be visible. Press RightControl to toggle.")
+
+-- Debug: Log script end
+print("Main script ended")
