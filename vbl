@@ -1,56 +1,50 @@
--- Place this in a LocalScript under StarterPlayerScripts
--- This script is for Volleyball Legends and includes a key system and main UI with features like a hitbox extender.
+local service = 3118;--Set your PlatoboosId    
+local secret = "2866565e-a6dd-4aa1-b5db-d2e4e1ee9801"; --Set Your Platoboost Api key
+local useNonce = true; 
+local onMessage = function(message)  game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", { Text = message; }) end;
 
--- == PLATOBOOST KEY SYSTEM ==
-local service = 3118
-local secret = "2866565e-a6dd-4aa1-b5db-d2e4e1ee9801"
-local useNonce = false -- Set to false as it worked for you
 
-local onMessage = function(message)
-    print("Platoboost Message: " .. message)
-    game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", { Text = message })
-end
+repeat task.wait(1) until game:IsLoaded() or game.Players.LocalPlayer;
 
-repeat task.wait(1) until game:IsLoaded()
 
-local requestSending = false
-local fSetClipboard, fRequest, fStringChar, fToString, fStringSub, fOsTime, fMathRandom, fMathFloor, fGetHwid = setclipboard or toclipboard, request or http_request or syn_request, string.char, tostring, string.sub, os.time, math.random, math.floor, gethwid or function() return game:GetService("Players").LocalPlayer.UserId end
-local cachedLink, cachedTime = "", 0
+local requestSending = false;
+local fSetClipboard, fRequest, fStringChar, fToString, fStringSub, fOsTime, fMathRandom, fMathFloor, fGetHwid = setclipboard or toclipboard, request or http_request, string.char, tostring, string.sub, os.time, math.random, math.floor, gethwid or function() return game:GetService("Players").LocalPlayer.UserId end
+local cachedLink, cachedTime = "", 0;
 local HttpService = game:GetService("HttpService")
 
 function lEncode(data)
     return HttpService:JSONEncode(data)
 end
-
 function lDecode(data)
     return HttpService:JSONDecode(data)
 end
-
 local function lDigest(input)
     local inputStr = tostring(input)
+    
+    
     local hash = {}
     for i = 1, #inputStr do
         table.insert(hash, string.byte(inputStr, i))
     end
+
     local hashHex = ""
     for _, byte in ipairs(hash) do
         hashHex = hashHex .. string.format("%02x", byte)
     end
+    
     return hashHex
 end
-
-local host = "https://api.platoboost.com"
+local host = "https://api.platoboost.com";
 local hostResponse = fRequest({
     Url = host .. "/public/connectivity",
     Method = "GET"
-})
-if hostResponse.StatusCode ~= 200 and hostResponse.StatusCode ~= 429 then
-    host = "https://api.platoboost.net"
+});
+if hostResponse.StatusCode ~= 200 or hostResponse.StatusCode ~= 429 then
+    host = "https://api.platoboost.net";
 end
 
 function cacheLink()
     if cachedTime + (10*60) < fOsTime() then
-        print("Fetching new link from Platoboost...")
         local response = fRequest({
             Url = host .. "/public/start",
             Method = "POST",
@@ -61,43 +55,36 @@ function cacheLink()
             Headers = {
                 ["Content-Type"] = "application/json"
             }
-        })
-
-        print("API Response Status: " .. tostring(response.StatusCode))
-        print("API Response Body: " .. tostring(response.Body))
+        });
 
         if response.StatusCode == 200 then
-            local decoded = lDecode(response.Body)
-            print("Decoded Response: " .. HttpService:JSONEncode(decoded))
+            local decoded = lDecode(response.Body);
+
             if decoded.success == true then
-                cachedLink = decoded.data.url
-                cachedTime = fOsTime()
-                print("Cached Link: " .. cachedLink)
-                return true, cachedLink
+                cachedLink = decoded.data.url;
+                cachedTime = fOsTime();
+                return true, cachedLink;
             else
-                onMessage(decoded.message)
-                print("API Error Message: " .. decoded.message)
-                return false, decoded.message
+                onMessage(decoded.message);
+                return false, decoded.message;
             end
         elseif response.StatusCode == 429 then
-            local msg = "you are being rate limited, please wait 20 seconds and try again."
-            onMessage(msg)
-            print("Rate Limited (429)")
-            return false, msg
+            local msg = "you are being rate limited, please wait 20 seconds and try again.";
+            onMessage(msg);
+            return false, msg;
         end
 
-        local msg = "Failed to cache link."
-        onMessage(msg)
-        print("Failed to cache link - Status Code: " .. tostring(response.StatusCode))
-        return false, msg
+        local msg = "Failed to cache link.";
+        onMessage(msg);
+        return false, msg;
     else
-        print("Using cached link: " .. cachedLink)
-        return true, cachedLink
+        return true, cachedLink;
     end
 end
 
-cacheLink()
-print("Your HWID: " .. lDigest(fGetHwid())) -- Debug HWID
+
+
+cacheLink();
 
 local generateNonce = function()
     local str = ""
@@ -107,37 +94,38 @@ local generateNonce = function()
     return str
 end
 
+
 for _ = 1, 5 do
-    local oNonce = generateNonce()
+    local oNonce = generateNonce();
     task.wait(0.2)
     if generateNonce() == oNonce then
-        local msg = "platoboost nonce error."
-        onMessage(msg)
-        error(msg)
+        local msg = "platoboost nonce error.";
+        onMessage(msg);
+        error(msg);
     end
 end
 
 local copyLink = function()
-    local success, link = cacheLink()
+    local success, link = cacheLink();
+    
     if success then
-        fSetClipboard(link)
+        print("SetClipBoard")
+        fSetClipboard(link);
     end
 end
 
 local redeemKey = function(key)
-    local nonce = generateNonce()
-    local endpoint = host .. "/public/redeem/" .. fToString(service)
+    local nonce = generateNonce();
+    local endpoint = host .. "/public/redeem/" .. fToString(service);
+
     local body = {
         identifier = lDigest(fGetHwid()),
         key = key
     }
-    if useNonce then
-        body.nonce = nonce
-    end
 
-    print("Redeeming key: " .. key)
-    print("Redeem endpoint: " .. endpoint)
-    print("Request body: " .. lEncode(body))
+    if useNonce then
+        body.nonce = nonce;
+    end
 
     local response = fRequest({
         Url = endpoint,
@@ -146,155 +134,129 @@ local redeemKey = function(key)
         Headers = {
             ["Content-Type"] = "application/json"
         }
-    })
-
-    print("Redeem HTTP response status: " .. tostring(response.StatusCode))
-    print("Redeem HTTP response body: " .. tostring(response.Body))
+    });
 
     if response.StatusCode == 200 then
-        local decoded = lDecode(response.Body)
-        print("Redeem Decoded response: " .. HttpService:JSONEncode(decoded))
+        local decoded = lDecode(response.Body);
         if decoded.success == true then
             if decoded.data.valid == true then
                 if useNonce then
-                    local expectedHash = lDigest("true" .. "-" .. nonce .. "-" .. secret)
-                    print("Expected hash: " .. expectedHash)
-                    print("Received hash: " .. tostring(decoded.data.hash))
-                    if decoded.data.hash == expectedHash then
-                        print("Redeem successful")
-                        return true
+                    if decoded.data.hash == lDigest("true" .. "-" .. nonce .. "-" .. secret) then
+                        return true;
                     else
-                        onMessage("failed to verify integrity.")
-                        print("Redeem integrity verification failed")
-                        return false
-                    end
+                        onMessage("failed to verify integrity.");
+                        return false;
+                    end    
                 else
-                    print("Redeem successful (no nonce)")
-                    return true
+                    return true;
                 end
             else
-                onMessage("key is invalid.")
-                print("Redeem key invalid")
-                return false
+                onMessage("key is invalid.");
+                return false;
             end
         else
             if fStringSub(decoded.message, 1, 27) == "unique constraint violation" then
-                onMessage("you already have an active key, please wait for it to expire before redeeming it.")
-                print("Redeem failed: unique constraint violation")
-                return false
+                onMessage("you already have an active key, please wait for it to expire before redeeming it.");
+                return false;
             else
-                onMessage(decoded.message)
-                print("Redeem failed: " .. decoded.message)
-                return false
+                onMessage(decoded.message);
+                return false;
             end
         end
     elseif response.StatusCode == 429 then
-        onMessage("you are being rate limited, please wait 20 seconds and try again.")
-        print("Redeem rate limited (429)")
-        return false
+        onMessage("you are being rate limited, please wait 20 seconds and try again.");
+        return false;
     else
-        onMessage("server returned an invalid status code, please try again later.")
-        print("Redeem invalid status code: " .. tostring(response.StatusCode))
-        return false
+        onMessage("server returned an invalid status code, please try again later.");
+        return false; 
     end
 end
 
+
 local verifyKey = function(key)
-    print("Starting key verification for key: " .. key)
-    
-    -- Trim any whitespace from the key for safety
-    local trimmedKey = string.gsub(key, "%s+", "") -- Remove all whitespace
-    print("Trimmed key: " .. trimmedKey)
-
     if requestSending == true then
-        onMessage("a request is already being sent, please slow down.")
-        print("Request already in progress")
-        return false
+        onMessage("a request is already being sent, please slow down.");
+        return false;
     else
-        requestSending = true
+        requestSending = true;
     end
 
-    local nonce = generateNonce()
-    local endpoint = host .. "/public/whitelist/" .. fToString(service) .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. trimmedKey
+    local nonce = generateNonce();
+    local endpoint = host .. "/public/whitelist/" .. fToString(service) .. "?identifier=" .. lDigest(fGetHwid()) .. "&key=" .. key;
+
     if useNonce then
-        endpoint = endpoint .. "&nonce=" .. nonce
+        endpoint = endpoint .. "&nonce=" .. nonce;
     end
-    print("Verification endpoint: " .. endpoint)
+    local response = fRequest({
+        Url = endpoint,
+        Method = "GET",
+    });
 
-    local success, response = pcall(function()
-        return fRequest({
-            Url = endpoint,
-            Method = "GET",
-        })
-    end)
-
-    requestSending = false
-
-    if not success then
-        print("HTTP request failed: " .. tostring(response))
-        onMessage("Failed to send request to Platoboost: " .. tostring(response))
-        return false
-    end
-
-    print("HTTP response status: " .. tostring(response.StatusCode))
-    print("HTTP response body: " .. tostring(response.Body))
+    requestSending = false;
 
     if response.StatusCode == 200 then
-        local decodedSuccess, decoded = pcall(function()
-            return lDecode(response.Body)
-        end)
-        if not decodedSuccess then
-            print("Failed to decode response: " .. tostring(decoded))
-            onMessage("Failed to decode server response")
-            return false
-        end
-
-        print("Decoded response: " .. HttpService:JSONEncode(decoded))
+        local decoded = lDecode(response.Body);
         if decoded.success == true then
             if decoded.data.valid == true then
                 if useNonce then
-                    local expectedHash = lDigest("true" .. "-" .. nonce .. "-" .. secret)
-                    print("Expected hash: " .. expectedHash)
-                    print("Received hash: " .. tostring(decoded.data.hash))
-                    if decoded.data.hash == expectedHash then
-                        print("Key verification successful")
-                        return true
-                    else
-                        onMessage("failed to verify integrity.")
-                        print("Integrity verification failed")
-                        return false
-                    end
+                    return true;
                 else
-                    print("Key verification successful (no nonce)")
-                    return true
+                    return true;
                 end
             else
-                print("Key is invalid according to API")
-                local keyPrefix = fStringSub(trimmedKey, 1, 5)
-                if keyPrefix == "KEY_" or keyPrefix == "FREE_" then
-                    print("Key starts with " .. keyPrefix .. ", attempting to redeem")
-                    local redeemSuccess = redeemKey(trimmedKey)
-                    print("Redeem result: " .. tostring(redeemSuccess))
-                    return redeemSuccess
+                if fStringSub(key, 1, 4) == "FREE_" then
+                    return redeemKey(key);
                 else
-                    onMessage("key is invalid - does not start with KEY_ or FREE_")
-                    print("Key does not start with KEY_ or FREE_")
-                    return false
+                    onMessage("key is invalid.");
+                    return false;
                 end
             end
         else
-            onMessage(decoded.message)
-            print("Server returned failure: " .. decoded.message)
-            return false
+            onMessage(decoded.message);
+            return false;
         end
     elseif response.StatusCode == 429 then
-        onMessage("you are being rate limited, please wait 20 seconds and try again.")
-        print("Rate limited (429)")
-        return false
+        onMessage("you are being rate limited, please wait 20 seconds and try again.");
+        return false;
     else
-        onMessage("server returned an invalid status code, please try again later.")
-        print("Invalid status code: " .. tostring(response.StatusCode))
-        return false
+        onMessage("server returned an invalid status code, please try again later.");
+        return false;
+    end
+end
+
+
+local getFlag = function(name)
+    local nonce = generateNonce();
+    local endpoint = host .. "/public/flag/" .. fToString(service) .. "?name=" .. name;
+
+    if useNonce then
+        endpoint = endpoint .. "&nonce=" .. nonce;
+    end
+
+    local response = fRequest({
+        Url = endpoint,
+        Method = "GET",
+    });
+
+    if response.StatusCode == 200 then
+        local decoded = lDecode(response.Body);
+        if decoded.success == true then
+            if useNonce then
+                if decoded.data.hash == lDigest(fToString(decoded.data.value) .. "-" .. nonce .. "-" .. secret) then
+                    return decoded.data.value;
+                else
+                    onMessage("failed to verify integrity.");
+                    return nil;
+                end
+            else
+                return decoded.data.value;
+            end
+        else
+            onMessage(decoded.message);
+            return nil;
+        end
+    else
+        return nil;
     end
 end
 
