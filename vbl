@@ -10,7 +10,7 @@ end
 
 local host = "https://api.platoboost.com"
 
--- Function to get a new key **after** Linkvertise
+-- Function to get a new key **after** Linkvertise (UNCHANGED)
 local function getFreshKey()
     local response = request({
         Url = host .. "/public/start",
@@ -34,7 +34,7 @@ local function getFreshKey()
     return nil
 end
 
--- Automatically generate and copy a fresh key link
+-- Automatically generate and copy a fresh key link (UNCHANGED)
 local function copyNewKey()
     local freshKey = getFreshKey()
     if freshKey then
@@ -45,29 +45,50 @@ local function copyNewKey()
     end
 end
 
--- Run automatically when script executes
+-- Run automatically when script executes (UNCHANGED)
 copyNewKey()
 
--- Function to redeem key (No nonce, so no expiration)
+-- Function to redeem key (No nonce, so no expiration) - UPDATED
 function redeemKey(key)
-    local endpoint = host .. "/public/redeem/" .. fToString(service)
+    print("Attempting to redeem key at: " .. host .. "/public/redeem/" .. tostring(service))
+    local endpoint = host .. "/public/redeem/" .. tostring(service)
 
     local body = {
-        identifier = lDigest(fGetHwid()),
+        identifier = tostring(game:GetService("Players").LocalPlayer.UserId),
         key = key
     }
 
-    local response = fRequest({
-        Url = endpoint,
-        Method = "POST",
-        Body = lEncode(body),
-        Headers = {
-            ["Content-Type"] = "application/json"
-        }
-    });
+    local success, response = pcall(function()
+        return request({ -- Replaced HttpService:RequestAsync with request
+            Url = endpoint,
+            Method = "POST",
+            Body = HttpService:JSONEncode(body),
+            Headers = {
+                ["Content-Type"] = "application/json"
+            }
+        })
+    end)
+
+    if not success then
+        warn("HTTP request failed in redeemKey: " .. tostring(response))
+        onMessage("Failed to contact the server. Please try again later.")
+        return false
+    end
+
+    print("redeemKey HTTP response status: " .. tostring(response.StatusCode))
+    print("redeemKey response body: " .. tostring(response.Body))
 
     if response.StatusCode == 200 then
-        local decoded = lDecode(response.Body)
+        local success, decoded = pcall(function()
+            return HttpService:JSONDecode(response.Body)
+        end)
+        if not success then
+            warn("Failed to decode response in redeemKey: " .. tostring(decoded))
+            onMessage("Server response error. Please try again later.")
+            return false
+        end
+
+        print("redeemKey decoded response: ", decoded)
         if decoded.success == true and decoded.data.valid == true then
             return true
         else
@@ -75,7 +96,7 @@ function redeemKey(key)
             return false
         end
     else
-        onMessage("Server error. Please try again later.")
+        onMessage("Server error. Status code: " .. tostring(response.StatusCode))
         return false
     end
 end
@@ -160,14 +181,14 @@ if not success or not KeyInput then
 end
 print("Key input created successfully")
 
--- "Get Key" button to copy the Platoboost link
+-- "Get Key" button to copy the Platoboost link (UNCHANGED)
 local GetKeyButton
 success, GetKeyButton = pcall(function()
     return KeyGroupbox:AddButton({
         Text = "Get Key",
         Func = function()
             print("Get Key button clicked")
-            copyLink()
+            copyNewKey()
             Library:Notify("Key link copied to clipboard! Paste it into your browser to get a key.", 5)
         end,
         DoubleClick = false
@@ -194,7 +215,7 @@ success, CheckKeyButton = pcall(function()
                 return
             end
 
-            local success = verifyKey(enteredKey)
+            local success = redeemKey(enteredKey)
             print("Verification result: " .. tostring(success))
             if success then
                 Library:Notify("Key validated successfully!", 3)
@@ -442,7 +463,7 @@ function loadMainUI()
         outlineSphere.Shape = Enum.PartType.Ball
         outlineSphere.Position = ball.Position
         outlineSphere.Anchored = false
-        outlineSphere.CanCollide = false
+        sphere.CanCollide = false
         outlineSphere.Transparency = sphereTransparency - 0.2
         outlineSphere.Color = outlineColor
 
