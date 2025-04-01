@@ -1,306 +1,179 @@
--- Debug: Log script start
-print("Main script started")
+-- Place this in a LocalScript under StarterPlayerScripts
 
-local service = 3118 -- Your Platoboost service ID
-local secret = "2866565e-a6dd-4aa1-b5db-d2e4e1ee9801" -- Your Platoboost API key
-
-local HttpService = game:GetService("HttpService")
+-- == SERVICES ==
+local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
 
-local function onMessage(message)
-    StarterGui:SetCore("ChatMakeSystemMessage", { Text = message })
-end
+local player = Players.LocalPlayer
 
-local host = "https://api.platoboost.com"
+-- == CREATE KEY SYSTEM UI ==
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KeySystemUI"
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Function to get a new key **after** Linkvertise
-local function getFreshKey()
-    print("getFreshKey called")
-    local response = request({
-        Url = host .. "/public/start",
-        Method = "POST",
-        Body = HttpService:JSONEncode({
-            service = service,
-            identifier = game:GetService("Players").LocalPlayer.UserId
-        }),
-        Headers = {
-            ["Content-Type"] = "application/json"
-        }
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 300, 0, 200)
+Frame.Position = UDim2.new(0.5, -150, 0.5, -100)
+Frame.BackgroundColor3 = Color3.fromRGB(50, 0, 100) -- Dark purple
+Frame.BorderSizePixel = 0
+Frame.Active = true -- Makes it draggable
+Frame.Draggable = true -- Enables dragging
+Frame.Parent = ScreenGui
+
+-- Add corner rounding
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 10)
+UICorner.Parent = Frame
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Key System"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 20
+Title.TextStrokeTransparency = 0.8
+Title.Parent = Frame
+
+-- Key Input
+local KeyInput = Instance.new("TextBox")
+KeyInput.Size = UDim2.new(0.9, 0, 0, 40)
+KeyInput.Position = UDim2.new(0.05, 0, 0.3, 0)
+KeyInput.BackgroundColor3 = Color3.fromRGB(70, 0, 140) -- Lighter purple
+KeyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+KeyInput.PlaceholderText = "Enter Key Here"
+KeyInput.PlaceholderColor3 = Color3.fromRGB(200, 200, 200)
+KeyInput.Font = Enum.Font.Gotham
+KeyInput.TextSize = 16
+KeyInput.ClearTextOnFocus = false
+KeyInput.Parent = Frame
+
+local KeyInputCorner = Instance.new("UICorner")
+KeyInputCorner.CornerRadius = UDim.new(0, 8)
+KeyInputCorner.Parent = KeyInput
+
+-- Submit Button
+local SubmitButton = Instance.new("TextButton")
+SubmitButton.Size = UDim2.new(0.4, 0, 0, 40)
+SubmitButton.Position = UDim2.new(0.05, 0, 0.65, 0)
+SubmitButton.BackgroundColor3 = Color3.fromRGB(90, 0, 180) -- Medium purple
+SubmitButton.Text = "Submit"
+SubmitButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SubmitButton.Font = Enum.Font.GothamBold
+SubmitButton.TextSize = 16
+SubmitButton.Parent = Frame
+
+local SubmitButtonCorner = Instance.new("UICorner")
+SubmitButtonCorner.CornerRadius = UDim.new(0, 8)
+SubmitButtonCorner.Parent = SubmitButton
+
+-- Get Key Button
+local GetKeyButton = Instance.new("TextButton")
+GetKeyButton.Size = UDim2.new(0.4, 0, 0, 40)
+GetKeyButton.Position = UDim2.new(0.55, 0, 0.65, 0)
+GetKeyButton.BackgroundColor3 = Color3.fromRGB(90, 0, 180) -- Medium purple
+GetKeyButton.Text = "Get Key"
+GetKeyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+GetKeyButton.Font = Enum.Font.GothamBold
+GetKeyButton.TextSize = 16
+GetKeyButton.Parent = Frame
+
+local GetKeyButtonCorner = Instance.new("UICorner")
+GetKeyButtonCorner.CornerRadius = UDim.new(0, 8)
+GetKeyButtonCorner.Parent = GetKeyButton
+
+-- Notification Function
+local function notify(message, duration)
+    StarterGui:SetCore("SendNotification", {
+        Title = "Key System",
+        Text = message,
+        Duration = duration or 3
     })
-
-    if response.StatusCode == 200 then
-        local data = HttpService:JSONDecode(response.Body)
-        if data.success then
-            return data.data.url
-        end
-    end
-
-    return nil
 end
 
--- Automatically generate and copy a fresh key link
-local function copyNewKey()
-    print("copyNewKey called")
-    local freshKey = getFreshKey()
-    if freshKey then
-        setclipboard(freshKey)
-        onMessage("New key link copied! Paste it in your browser.")
+-- Key Validation
+local correctKey = "volleyballistuffondeeznutz"
+local keyLink = "https://pastebin.com/mk9EwicR"
+
+local function checkKey()
+    local input = KeyInput.Text
+    if input == correctKey then
+        notify("Key accepted! Loading script...", 2)
+        ScreenGui:Destroy() -- Remove key UI
+        loadMainScript() -- Proceed to load the main script
     else
-        onMessage("Failed to generate a new key. Try again later.")
+        notify("Invalid key! Please try again.", 3)
+        KeyInput.Text = ""
     end
 end
 
--- Run automatically when script executes
-copyNewKey()
+-- Button Connections
+SubmitButton.MouseButton1Click:Connect(checkKey)
 
--- Function to redeem key (No nonce, so no expiration)
-function redeemKey(key)
-    print("redeemKey called with key: " .. tostring(key))
-    local endpoint = host .. "/public/redeem/" .. tostring(service)
+GetKeyButton.MouseButton1Click:Connect(function()
+    setclipboard(keyLink)
+    notify("Key link copied to clipboard!", 3)
+end)
 
-    local body = {
-        identifier = tostring(game:GetService("Players").LocalPlayer.UserId),
-        key = key
-    }
+-- Support Enter key on mobile/PC
+KeyInput.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        checkKey()
+    end
+end)
 
-    local success, response = pcall(function()
-        return request({
-            Url = endpoint,
-            Method = "POST",
-            Body = HttpService:JSONEncode(body),
-            Headers = {
-                ["Content-Type"] = "application/json"
-            }
-        })
+-- Mobile Dragging Support
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+Frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Frame.Position
+    end
+end)
+
+Frame.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = input.Position - dragStart
+        Frame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- == MAIN SCRIPT ==
+function loadMainScript()
+    -- == LOAD THE OBSIDIAN UI LIBRARY ==
+    local success, Library = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/Library.lua"))()
     end)
 
-    if not success then
-        warn("HTTP request failed in redeemKey: " .. tostring(response))
-        onMessage("Failed to contact the server. Please try again later.")
-        return false
+    if not success or not Library then
+        warn("Failed to load Obsidian UI Library! Error: " .. tostring(Library))
+        return
     end
+    print("Obsidian UI Library loaded successfully")
 
-    if response.StatusCode == 200 then
-        local success, decoded = pcall(function()
-            return HttpService:JSONDecode(response.Body)
-        end)
-        if not success then
-            warn("Failed to decode response in redeemKey: " .. tostring(decoded))
-            onMessage("Server response error. Please try again later.")
-            return false
-        end
-
-        if decoded.success == true and decoded.data.valid == true then
-            return true
-        else
-            onMessage("Key is invalid.")
-            return false
-        end
-    else
-        onMessage("Server error. Status code: " .. tostring(response.StatusCode))
-        return false
-    end
-end
-
--- == LOAD THE OBSIDIAN UI LIBRARY ==
-local Library
-local success, result = pcall(function()
-    print("Loading Obsidian UI Library")
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/Library.lua"))()
-end)
-
-if not success or not result then
-    warn("Failed to load Obsidian UI Library! Error: " .. tostring(result))
-    return
-end
-Library = result
-print("Obsidian UI Library loaded successfully")
-
--- == CREATE THE KEY SYSTEM WINDOW ==
-local KeyWindow
-local KeyScreenGui
-success, KeyWindow = pcall(function()
-    local window = Library:CreateWindow({
-        Title = "Lyez Key System",
-        Footer = "Powered by Platoboost",
-        ToggleKeybind = Enum.KeyCode.RightControl,
-        Center = true,
-        AutoShow = true
-    })
-    for _, gui in pairs(game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"):GetChildren()) do
-        if gui:IsA("ScreenGui") and gui.Name:match("Obsidian") then
-            KeyScreenGui = gui
-            print("Found Key System ScreenGui: " .. gui.Name)
-            break
-        end
-    end
-    return window
-end)
-
-if not success or not KeyWindow then
-    warn("Failed to create key system window! Error: " .. tostring(KeyWindow))
-    return
-end
-print("Key system window created successfully")
-
--- == CREATE A TAB AND GROUPBOX FOR THE KEY SYSTEM ==
-local KeyTab
-success, KeyTab = pcall(function()
-    return KeyWindow:AddTab("Key System", "key")
-end)
-if not success or not KeyTab then
-    warn("Failed to create key system tab! Error: " .. tostring(KeyTab))
-    return
-end
-print("Key system tab created successfully")
-
-local KeyGroupbox
-success, KeyGroupbox = pcall(function()
-    return KeyTab:AddLeftGroupbox("Enter Key")
-end)
-if not success or not KeyGroupbox then
-    warn("Failed to create key system groupbox! Error: " .. tostring(KeyGroupbox))
-    return
-end
-print("Key system groupbox created successfully")
-
--- == KEY SYSTEM UI ELEMENTS ==
-local KeyInput
-success, KeyInput = pcall(function()
-    return KeyGroupbox:AddInput("KeyInput", {
-        Text = "Enter Key",
-        Placeholder = "Paste your key here",
-        Callback = function(Value)
-            print("Key entered: " .. Value)
-        end
-    })
-end)
-if not success or not KeyInput then
-    warn("Failed to create key input! Error: " .. tostring(KeyInput))
-    return
-end
-print("Key input created successfully")
-
-local GetKeyButton
-success, GetKeyButton = pcall(function()
-    return KeyGroupbox:AddButton({
-        Text = "Get Key",
-        Func = function()
-            print("Get Key button clicked")
-            copyNewKey()
-            Library:Notify("Key link copied to clipboard! Paste it into your browser to get a key.", 5)
-        end,
-        DoubleClick = false
-    })
-end)
-if not success or not GetKeyButton then
-    warn("Failed to create Get Key button! Error: " .. tostring(GetKeyButton))
-    return
-end
-print("Get Key button created successfully")
-
-local CheckKeyButton
-success, CheckKeyButton = pcall(function()
-    return KeyGroupbox:AddButton({
-        Text = "Check Key",
-        Func = function()
-            print("Check Key button clicked")
-            local enteredKey = KeyInput.Value
-            print("Entered key: " .. enteredKey)
-            if enteredKey == "" then
-                Library:Notify("Please enter a key!", 3)
-                print("No key entered")
-                return
-            end
-
-            local success = redeemKey(enteredKey)
-            print("Verification result: " .. tostring(success))
-            if success then
-                Library:Notify("Key validated successfully!", 3)
-                print("Attempting to unload key system UI...")
-
-                local cleanupSuccess, cleanupError = pcall(function()
-                    Library:Unload()
-                    print("Key system UI unloaded using Library:Unload()")
-
-                    KeyWindow = nil
-                    KeyTab = nil
-                    KeyGroupbox = nil
-                    KeyInput = nil
-                    GetKeyButton = nil
-                    CheckKeyButton = nil
-                    KeyScreenGui = nil
-
-                    Library = nil
-
-                    collectgarbage("collect")
-                    print("Key system UI references cleared and garbage collected")
-
-                    local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
-                    local foundGui = false
-                    for _, gui in pairs(playerGui:GetChildren()) do
-                        if gui:IsA("ScreenGui") and gui.Name:match("Obsidian") then
-                            foundGui = true
-                            warn("Lingering ScreenGui found after unload: " .. gui.Name .. " (Enabled: " .. tostring(gui.Enabled) .. ")")
-                        end
-                    end
-                    if not foundGui then
-                        print("No Obsidian ScreenGuis found - unload successful")
-                    else
-                        warn("Unload incomplete - Obsidian ScreenGuis still present")
-                    end
-                end)
-
-                if not cleanupSuccess then
-                    warn("Unload failed: " .. tostring(cleanupError))
-                else
-                    print("Unload completed successfully")
-                end
-
-                print("Waiting for 2 seconds before loading main UI...")
-                task.wait(2)
-
-                print("Proceeding to load main UI...")
-                local mainUISuccess, mainUIError = pcall(loadMainUI)
-                if not mainUISuccess then
-                    warn("Failed to load main UI: " .. tostring(mainUIError))
-                else
-                    print("Main UI loaded successfully")
-                end
-            else
-                Library:Notify("Invalid key! Please try again.", 3)
-                print("Key validation failed")
-            end
-        end,
-        DoubleClick = false
-    })
-end)
-if not success or not CheckKeyButton then
-    warn("Failed to create Check Key button! Error: " .. tostring(CheckKeyButton))
-    return
-end
-print("Check Key button created successfully")
-
--- == FUNCTION TO LOAD THE MAIN UI WITH HITBOX EXTENDER AND FEATURES ==
-function loadMainUI()
-    print("loadMainUI called")
-
-    if not Library then
-        local success, result = pcall(function()
-            print("Reloading Obsidian UI Library")
-            return loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/Library.lua"))()
-        end)
-
-        if not success or not result then
-            warn("Failed to reload Obsidian UI Library! Error: " .. tostring(result))
-            return
-        end
-        Library = result
-        print("Obsidian UI Library reloaded successfully")
-    end
-
+    -- == CREATE THE UI WINDOW ==
     local Window
-    local success, Window = pcall(function()
+    success, Window = pcall(function()
         return Library:CreateWindow({
             Title = "Lyez",
             Footer = "v1.0.0",
@@ -316,22 +189,28 @@ function loadMainUI()
     end
     print("UI window created successfully")
 
+    -- == CREATE TABS IN THE WINDOW ==
     local MainTab = Window:AddTab("Main", "home")
     local StatModifierTab = Window:AddTab("Stat Modifier", "stats")
     local OtherTab = Window:AddTab("Other", "misc")
     local UiSettingsTab = Window:AddTab("Ui Settings", "settings")
 
+    -- == CREATE GROUPBOXES FOR MAIN TAB ==
     local MainGroupbox = MainTab:AddLeftGroupbox("Main")
     local MovementGroupbox = MainTab:AddRightGroupbox("Movement Settings")
     local ServeGroupbox = MainTab:AddRightGroupbox("Serve Settings")
 
+    -- == CREATE GROUPBOXES FOR STAT MODIFIER TAB ==
     local StatsGroupbox = StatModifierTab:AddLeftGroupbox("Stats")
     local StatMovementGroupbox = StatModifierTab:AddRightGroupbox("Movement")
 
+    -- == CREATE GROUPBOXES FOR OTHER TAB ==
     local NameChangerGroupbox = OtherTab:AddLeftGroupbox("Name Changer")
 
+    -- == CREATE GROUPBOXES FOR UI SETTINGS TAB ==
     local UiCustomizationGroupbox = UiSettingsTab:AddLeftGroupbox("UI Customization")
 
+    -- == SERVICES ==
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -343,6 +222,7 @@ function loadMainUI()
     local character = player.Character or player.CharacterAdded:Wait()
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
+    -- == CONFIGURATION VARIABLES ==
     local hitboxEnabled = false
     local EXTENDED_RANGE = 10
     local sphereTransparency = 0.7
@@ -377,11 +257,13 @@ function loadMainUI()
         JumpHeight = 7.2
     }
 
+    -- == STORAGE FOR HITBOX SPHERES, BEAMS, AND CONNECTIONS ==
     local sphereReferences = {}
     local beams = {}
     local midAirConnections = {}
     local statConnections = {}
 
+    -- == FIND THE INTERACT REMOTE FUNCTION ==
     local interactRemote = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_knit@1.7.0"):WaitForChild("knit"):WaitForChild("Services"):WaitForChild("BallService"):WaitForChild("RF"):WaitForChild("Interact")
     if not interactRemote then
         print("Interact RemoteFunction not found!")
@@ -389,6 +271,7 @@ function loadMainUI()
     end
     print("Interact RemoteFunction found")
 
+    -- == HITBOX EXTENDER FUNCTIONS ==
     local function getBallId(ballModel)
         local ballId = tonumber(ballModel.Name:match("CLIENT_BALL_(%d+)"))
         return ballId
@@ -427,7 +310,6 @@ function loadMainUI()
         sphere.Position = ball.Position
         sphere.Anchored = false
         sphere.CanCollide = false
-        sphere.Massless = true
         sphere.Transparency = sphereTransparency
         sphere.Color = sphereColor
 
@@ -438,24 +320,8 @@ function loadMainUI()
         outlineSphere.Position = ball.Position
         outlineSphere.Anchored = false
         outlineSphere.CanCollide = false
-        outlineSphere.Massless = true
         outlineSphere.Transparency = sphereTransparency - 0.2
         outlineSphere.Color = outlineColor
-
-        local success, physicsService = pcall(function()
-            return game:GetService("PhysicsService")
-        end)
-        if success and physicsService then
-            local groupName = "NonCollidableHitbox"
-            pcall(function()
-                physicsService:CreateCollisionGroup(groupName)
-                physicsService:CollisionGroupSetCollidable(groupName, groupName, false)
-                physicsService:CollisionGroupSetCollidable(groupName, "Default", false)
-                physicsService:SetPartCollisionGroup(sphere, groupName)
-                physicsService:SetPartCollisionGroup(outlineSphere, groupName)
-                print("Set collision group for hitbox spheres to non-collidable")
-            end)
-        end
 
         local weldMain = Instance.new("WeldConstraint")
         weldMain.Part0 = ball
@@ -529,6 +395,12 @@ function loadMainUI()
             createHitboxSphere(ballPart, descendant)
         else
             print("No BasePart found in ball model after timeout:", descendant.Name)
+            local children = descendant:GetChildren()
+            local childNames = {}
+            for _, child in pairs(children) do
+                table.insert(childNames, child.Name .. " (" .. child.ClassName .. ")")
+            end
+            print("DEBUG: Children of ball model: " .. table.concat(childNames, ", "))
         end
     end)
 
@@ -540,10 +412,14 @@ function loadMainUI()
                 createHitboxSphere(ballPart, descendant)
             else
                 print("No BasePart found in ball model:", descendant.Name)
+                for _, child in pairs(descendant:GetChildren()) do
+                    print("Child in ball model:", child.Name, "Type:", child.ClassName)
+                end
             end
         end
     end
 
+    -- == AIMING BEAM FUNCTIONS ==
     local function createAimIndicator(character)
         if not character then
             print("Cannot create beam: character is nil")
@@ -607,6 +483,7 @@ function loadMainUI()
         end
     end
 
+    -- == MID-AIR CONTROL FUNCTIONS ==
     local function setupMidAirControl(player)
         local character = player.Character or player.CharacterAdded:Wait()
         local humanoid = character:WaitForChild("Humanoid")
@@ -662,6 +539,7 @@ function loadMainUI()
         end
     end
 
+    -- == SERVE POWER OVERRIDE FUNCTIONS ==
     local serveFunction = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index")
         :WaitForChild("sleitnick_knit@1.7.0"):WaitForChild("knit")
         :WaitForChild("Services"):WaitForChild("GameService"):WaitForChild("RF"):WaitForChild("Serve")
@@ -690,6 +568,7 @@ function loadMainUI()
         print("Serve power override disabled.")
     end
 
+    -- == STAT MODIFIER FUNCTIONS ==
     local function applyStatModifiers()
         local character = player.Character
         if not character then return end
@@ -756,6 +635,16 @@ function loadMainUI()
             end
         else
             warn("DEBUG: No stats module found in common locations. Humanoid boosts applied.")
+            local function getNames(instances)
+                local names = {}
+                for _, instance in pairs(instances) do
+                    table.insert(names, instance.Name)
+                end
+                return table.concat(names, ", ")
+            end
+            print("DEBUG: Player children: " .. getNames(player:GetChildren()))
+            print("DEBUG: Character children: " .. getNames(character:GetChildren()))
+            print("DEBUG: ReplicatedStorage children: " .. getNames(ReplicatedStorage:GetChildren()))
         end
     end
 
@@ -822,6 +711,7 @@ function loadMainUI()
         end
     end
 
+    -- == NAME CHANGER FUNCTIONS ==
     local function changePlayerName(newName)
         local character = player.Character
         if not character then
@@ -845,12 +735,25 @@ function loadMainUI()
                 Library:Notify("Name changed to " .. newName, 3)
             else
                 Library:Notify("PlayerName not found in Nametag!", 3)
+                local children = nametag:GetChildren()
+                local childNames = {}
+                for _, child in pairs(children) do
+                    table.insert(childNames, child.Name .. " (" .. child.ClassName .. ")")
+                end
+                print("DEBUG: Children of Nametag: " .. table.concat(childNames, ", "))
             end
         else
             Library:Notify("Nametag not found in character!", 3)
+            local children = character:GetChildren()
+            local childNames = {}
+            for _, child in pairs(children) do
+                table.insert(childNames, child.Name .. " (" .. child.ClassName .. ")")
+            end
+            print("DEBUG: Children of character: " .. table.concat(childNames, ", "))
         end
     end
 
+    -- == UI ELEMENTS ==
     local HitboxToggle = MainGroupbox:AddToggle("HitboxToggle", {
         Text = "Enable Hitbox Extender",
         Default = false,
@@ -924,8 +827,8 @@ function loadMainUI()
     })
 
     local SphereColorPicker = ColorPickerToggle:AddColorPicker("SphereColorPicker", {
-        Title = "Select Sphere Color",
         Default = Color3.fromRGB(255, 0, 0),
+        Title = "Select Sphere Color",
         Callback = function(Value)
             sphereColor = Value
             updateSpheres()
@@ -1162,6 +1065,7 @@ function loadMainUI()
         Text = "Config Name",
         Placeholder = "Enter config name",
         Callback = function(Value)
+            -- Store the config name for saving/loading
         end
     })
 
@@ -1214,14 +1118,41 @@ function loadMainUI()
         end
     })
 
-    local ColorPickerDisabledLabel = UiCustomizationGroupbox:AddLabel("Color customization disabled due to library issues.")
+    local AccentColorPicker = UiCustomizationGroupbox:AddColorPicker("AccentColorPicker", {
+        Text = "Accent Color",
+        Default = Color3.fromRGB(0, 120, 215),
+        Callback = function(Value)
+            Library:SetAccentColor(Value)
+            Library:Notify("Accent color updated!", 3)
+        end
+    })
 
+    local BackgroundColorPicker = UiCustomizationGroupbox:AddColorPicker("BackgroundColorPicker", {
+        Text = "Background Color",
+        Default = Color3.fromRGB(30, 30, 30),
+        Callback = function(Value)
+            Library:SetBackgroundColor(Value)
+            Library:Notify("Background color updated!", 3)
+        end
+    })
+
+    local TextColorPicker = UiCustomizationGroupbox:AddColorPicker("TextColorPicker", {
+        Text = "Text Color",
+        Default = Color3.fromRGB(255, 255, 255),
+        Callback = function(Value)
+            Library:SetTextColor(Value)
+            Library:Notify("Text color updated!", 3)
+        end
+    })
+
+    -- == HITBOX EXTENDER: HANDLE PLAYER RESPAWN ==
     player.CharacterAdded:Connect(function(newCharacter)
         character = newCharacter
         humanoidRootPart = character:WaitForChild("HumanoidRootPart")
         applyStatModifiers()
     end)
 
+    -- == HITBOX EXTENDER: HANDLE CLICKING ==
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if not hitboxEnabled then return end
         if gameProcessed or input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
@@ -1262,6 +1193,7 @@ function loadMainUI()
         lastHitTime = currentTime
     end)
 
+    -- == AIMING BEAM: CONNECT NEW PLAYERS ==
     Players.PlayerAdded:Connect(function(player)
         print("New player joined:", player.Name)
         
@@ -1322,6 +1254,7 @@ function loadMainUI()
         end
     end)
 
+    -- == AIMING BEAM: CLEAN UP WHEN PLAYERS LEAVE ==
     Players.PlayerRemoving:Connect(function(player)
         print("Player left:", player.Name)
         if player.Character then
@@ -1331,6 +1264,7 @@ function loadMainUI()
         end
     end)
 
+    -- == AIMING BEAM: HANDLE EXISTING PLAYERS ==
     for _, player in pairs(Players:GetPlayers()) do
         if player.Character and aimEnabled then
             print("Creating beam for existing player:", player.Name)
@@ -1345,12 +1279,10 @@ function loadMainUI()
         end
     end
 
+    -- == SHOW THE UI ==
     Library:Toggle(true)
-    print("Main UI should now be visible. Press RightControl to toggle.")
+    print("UI should now be visible. Press RightControl to toggle.")
 end
 
-Library:Toggle(true)
-print("Key system UI should now be visible. Press RightControl to toggle.")
-
--- Debug: Log script end
-print("Main script ended")
+-- Initial notification
+notify("Please enter the key to proceed.", 5)
