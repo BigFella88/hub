@@ -98,7 +98,7 @@ end
 
 -- Key Validation
 local correctKey = "volleyballistuffondeeznutz"
-local keyLink = "https://pastebin.com/mk9EwicR"
+local keyLink = "https://direct-link.net/174459/lyez-hub-key-system"
 
 local function checkKey()
     local input = KeyInput.Text
