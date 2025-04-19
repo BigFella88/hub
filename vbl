@@ -97,7 +97,7 @@ local function notify(message, duration)
 end
 
 -- Key Validation
-local correctKey = "FREE_BIGPLUTO81929022833"
+local correctKey = "FREE_7282828290AGB6393"
 local keyLink = "https://direct-link.net/174459/lyez-hub-key-system"
 
 local function checkKey()
